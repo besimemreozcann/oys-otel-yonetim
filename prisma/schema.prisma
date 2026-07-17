@@ -1,0 +1,485 @@
+// =====================================================================
+// OYS — Çoklu Otel Yönetim Sistemi · Prisma Şeması
+// Kaynak: OYS_Codex_Proje_Plani.md · Bölüm 2 (Veri Modeli)
+// Veritabanı: PostgreSQL 16
+// NOT: Rezervasyon çakışma engeli Prisma'da tanımlanamaz;
+//      migration sonrası raw SQL ile eklenir (dosya sonundaki yorum bloğu).
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// ENUM'LAR
+// ---------------------------------------------------------------------
+
+enum Rol {
+  SUPER_ADMIN
+  ADMIN
+  PERSONEL
+}
+
+enum YetkiSeviyesiRezervasyon {
+  YOK
+  GORUNTULE
+  EKLE
+  TAM
+}
+
+enum YetkiSeviyesiCari {
+  YOK
+  GORUNTULE
+  TAHSILAT
+  TAM
+}
+
+enum YetkiSeviyesiFinans {
+  YOK
+  GORUNTULE
+  SINIRLI
+  TAM
+}
+
+enum YetkiSeviyesiRapor {
+  YOK
+  GORUNTULE
+  TAM
+}
+
+enum CariTur {
+  TUR_SIRKETI
+  ACENTE
+  KURUMSAL
+  TEDARIKCI
+  BIREYSEL
+}
+
+enum OdaOperasyonDurumu {
+  BOS
+  DOLU
+  REZERVE
+  BAKIM
+  TEMIZLIK
+}
+
+enum RezervasyonDurumu {
+  BEKLEMEDE
+  ONAYLANDI
+  GIRIS_YAPILDI
+  CIKIS_YAPILDI
+  IPTAL
+}
+
+enum UcretTipi {
+  TOPLAM
+  KISI_BASI
+}
+
+enum HesapTuru {
+  NAKIT_KASA
+  BANKA
+}
+
+enum CariHareketTuru {
+  KONAKLAMA_BORC
+  TAHSILAT
+  ODEME
+  DUZELTME
+}
+
+enum HesapHareketTuru {
+  TAHSILAT
+  ODEME
+  GELIR
+  GIDER
+  VIRMAN_GIRIS
+  VIRMAN_CIKIS
+}
+
+enum OdemeYontemi {
+  NAKIT
+  HAVALE
+  EFT
+  KART
+}
+
+enum IletisimTuru {
+  ARANDI
+  ULASILAMADI
+  GERI_DONUS_BEKLENIYOR
+  WHATSAPP
+  NOT
+}
+
+enum OnayTuru {
+  GECMIS_TARIH_DUZELTME
+  KISI_SAYISI_DEGISIKLIGI
+  CARI_BAKIYE_DUZELTME
+  TAHSILAT_IPTAL
+  GIDER_IPTAL
+  REZERVASYON_SILME
+}
+
+enum OnayDurumu {
+  BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+}
+
+// ---------------------------------------------------------------------
+// ORGANİZASYON
+// ---------------------------------------------------------------------
+
+model Sirket {
+  id        Int      @id @default(autoincrement())
+  ad        String
+  oteller   Otel[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Otel {
+  id        Int     @id @default(autoincrement())
+  sirketId  Int
+  sirket    Sirket  @relation(fields: [sirketId], references: [id])
+  ad        String
+  adres     String?
+  telefon   String?
+  eposta    String?
+  aktifMi   Boolean @default(true)
+
+  katlar        Kat[]
+  odalar        Oda[]
+  krokiler      Kroki[]
+  yetkiler      KullaniciOtelYetkisi[]
+  rezervasyonlar Rezervasyon[]
+  hesaplar      Hesap[]
+  cariHareketler CariHareket[]
+  islemLoglari  IslemLogu[]
+  onayTalepleri OnayTalebi[]
+
+  silindiMi      Boolean   @default(false)
+  silinmeTarihi  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Kat {
+  id      Int    @id @default(autoincrement())
+  otelId  Int
+  otel    Otel   @relation(fields: [otelId], references: [id])
+  ad      String // "Zemin", "1. Kat" vb.
+  sira    Int    @default(0)
+  odalar  Oda[]
+
+  @@unique([otelId, ad])
+}
+
+model Oda {
+  id               Int                @id @default(autoincrement())
+  otelId           Int
+  otel             Otel               @relation(fields: [otelId], references: [id])
+  katId            Int
+  kat              Kat                @relation(fields: [katId], references: [id])
+  odaNo            String
+  odaTipi          String? // "Standart", "Suit" vb. — serbest metin
+  kapasite         Int
+  aktifMi          Boolean            @default(true)
+  operasyonDurumu  OdaOperasyonDurumu @default(BOS)
+  aciklama         String?
+  // Kroki üzerindeki konum (dikdörtgen yerleşim)
+  krokiX           Float?
+  krokiY           Float?
+  krokiGenislik    Float?
+  krokiYukseklik   Float?
+
+  rezervasyonlar Rezervasyon[]
+
+  silindiMi     Boolean   @default(false)
+  silinmeTarihi DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([otelId, odaNo])
+}
+
+model Kroki {
+  id        Int      @id @default(autoincrement())
+  otelId    Int
+  otel      Otel     @relation(fields: [otelId], references: [id])
+  katId     Int?     // kat bazlı kroki; null ise otel geneli
+  ad        String
+  svgVeri   String   // SVG içeriği (temizlenmiş/sanitize edilmiş)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------
+// KULLANICI VE YETKİ
+// ---------------------------------------------------------------------
+
+model Kullanici {
+  id           Int     @id @default(autoincrement())
+  adSoyad      String
+  kullaniciAdi String  @unique
+  sifreHash    String
+  rol          Rol     @default(PERSONEL)
+  aktifMi      Boolean @default(true)
+
+  otelYetkileri    KullaniciOtelYetkisi[]
+  rezervasyonlar   Rezervasyon[]          @relation("RezervasyonOlusturan")
+  cariHareketler   CariHareket[]
+  hesapHareketler  HesapHareket[]
+  iletisimKayitlari IletisimKaydi[]
+  islemLoglari     IslemLogu[]
+  onayTalepleri    OnayTalebi[]           @relation("TalepEden")
+  onayKararlari    OnayTalebi[]           @relation("KararVeren")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KullaniciOtelYetkisi {
+  id                 Int                      @id @default(autoincrement())
+  kullaniciId        Int
+  kullanici          Kullanici                @relation(fields: [kullaniciId], references: [id])
+  otelId             Int
+  otel               Otel                     @relation(fields: [otelId], references: [id])
+  rezervasyonYetkisi YetkiSeviyesiRezervasyon @default(YOK)
+  cariYetkisi        YetkiSeviyesiCari        @default(YOK)
+  finansYetkisi      YetkiSeviyesiFinans      @default(YOK)
+  raporYetkisi       YetkiSeviyesiRapor       @default(YOK)
+
+  @@unique([kullaniciId, otelId])
+}
+
+// ---------------------------------------------------------------------
+// CARİ
+// ---------------------------------------------------------------------
+
+model Cari {
+  id           Int      @id @default(autoincrement())
+  ad           String
+  tur          CariTur
+  vergiNo      String?
+  vergiDairesi String?
+  adres        String?
+  telefon      String?
+  whatsapp     String?
+  eposta       String?
+  aktifMi      Boolean  @default(true)
+
+  yetkililer        CariYetkili[]
+  iletisimKayitlari IletisimKaydi[]
+  rezervasyonlar    Rezervasyon[]
+  hareketler        CariHareket[]
+
+  silindiMi     Boolean   @default(false)
+  silinmeTarihi DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model CariYetkili {
+  id       Int     @id @default(autoincrement())
+  cariId   Int
+  cari     Cari    @relation(fields: [cariId], references: [id])
+  adSoyad  String
+  gorev    String?
+  telefon  String?
+  whatsapp String?
+  eposta   String?
+}
+
+model IletisimKaydi {
+  id          Int          @id @default(autoincrement())
+  cariId      Int
+  cari        Cari         @relation(fields: [cariId], references: [id])
+  kullaniciId Int
+  kullanici   Kullanici    @relation(fields: [kullaniciId], references: [id])
+  tarihSaat   DateTime     @default(now())
+  tur         IletisimTuru
+  aciklama    String?
+}
+
+// ---------------------------------------------------------------------
+// REZERVASYON
+// ---------------------------------------------------------------------
+
+model Rezervasyon {
+  id            Int               @id @default(autoincrement())
+  otelId        Int
+  otel          Otel              @relation(fields: [otelId], references: [id])
+  odaId         Int
+  oda           Oda               @relation(fields: [odaId], references: [id])
+  cariId        Int
+  cari          Cari              @relation(fields: [cariId], references: [id])
+  girisTarihi   DateTime          @db.Date
+  girisSaati    String            @default("14:00")
+  cikisTarihi   DateTime          @db.Date
+  cikisSaati    String            @default("12:00")
+  kisiSayisi    Int
+  ucretTipi     UcretTipi         @default(TOPLAM)
+  birimUcret    Decimal?          @db.Decimal(14, 2) // kişi başı ücrette gecelik birim
+  toplamTutar   Decimal           @db.Decimal(14, 2)
+  durum         RezervasyonDurumu @default(BEKLEMEDE)
+  not           String?
+  olusturanId   Int
+  olusturan     Kullanici         @relation("RezervasyonOlusturan", fields: [olusturanId], references: [id])
+
+  cariHareketler CariHareket[]
+
+  silindiMi     Boolean   @default(false)
+  silinmeTarihi DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([otelId, girisTarihi, cikisTarihi])
+  @@index([cariId])
+  // ÇAKIŞMA ENGELİ: dosya sonundaki raw SQL migration ile eklenir.
+}
+
+// ---------------------------------------------------------------------
+// FİNANS
+// ---------------------------------------------------------------------
+
+model Hesap {
+  id       Int       @id @default(autoincrement())
+  otelId   Int
+  otel     Otel      @relation(fields: [otelId], references: [id])
+  tur      HesapTuru
+  ad       String    // "Resepsiyon Kasası", "Ziraat Çankaya Şubesi"
+  bankaAdi String?
+  iban     String?
+  aktifMi  Boolean   @default(true)
+
+  hareketler      HesapHareket[] @relation("HesapAna")
+  karsiHareketler HesapHareket[] @relation("HesapKarsi")
+
+  silindiMi     Boolean   @default(false)
+  silinmeTarihi DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([otelId, ad])
+}
+
+model CariHareket {
+  id            Int             @id @default(autoincrement())
+  otelId        Int
+  otel          Otel            @relation(fields: [otelId], references: [id])
+  cariId        Int
+  cari          Cari            @relation(fields: [cariId], references: [id])
+  rezervasyonId Int?
+  rezervasyon   Rezervasyon?    @relation(fields: [rezervasyonId], references: [id])
+  tarih         DateTime        @default(now())
+  tur           CariHareketTuru
+  borc          Decimal         @default(0) @db.Decimal(14, 2)
+  alacak        Decimal         @default(0) @db.Decimal(14, 2)
+  odemeYontemi  OdemeYontemi?   // tahsilat/ödemede dolu
+  aciklama      String?
+  olusturanId   Int
+  olusturan     Kullanici       @relation(fields: [olusturanId], references: [id])
+
+  hesapHareketler HesapHareket[]
+
+  silindiMi     Boolean   @default(false)
+  silinmeTarihi DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([cariId, tarih])
+  @@index([otelId, tarih])
+}
+
+model HesapHareket {
+  id            Int              @id @default(autoincrement())
+  hesapId       Int
+  hesap         Hesap            @relation("HesapAna", fields: [hesapId], references: [id])
+  tarih         DateTime         @default(now())
+  tur           HesapHareketTuru
+  tutar         Decimal          @db.Decimal(14, 2)
+  karsiHesapId  Int?             // virmanda karşı hesap
+  karsiHesap    Hesap?           @relation("HesapKarsi", fields: [karsiHesapId], references: [id])
+  cariHareketId Int?             // tahsilat/ödemeye bağlıysa
+  cariHareket   CariHareket?     @relation(fields: [cariHareketId], references: [id])
+  kategori      String?          // gider/gelir kategorisi
+  aciklama      String?
+  olusturanId   Int
+  olusturan     Kullanici        @relation(fields: [olusturanId], references: [id])
+
+  silindiMi     Boolean   @default(false)
+  silinmeTarihi DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([hesapId, tarih])
+}
+
+// ---------------------------------------------------------------------
+// DENETİM
+// ---------------------------------------------------------------------
+
+model IslemLogu {
+  id           Int       @id @default(autoincrement())
+  kullaniciId  Int
+  kullanici    Kullanici @relation(fields: [kullaniciId], references: [id])
+  otelId       Int?
+  otel         Otel?     @relation(fields: [otelId], references: [id])
+  tarihSaat    DateTime  @default(now())
+  islemTuru    String    // "REZERVASYON_GUNCELLEME", "TAHSILAT_EKLEME" vb.
+  tablo        String
+  kayitId      Int
+  oncekiDeger  Json?
+  yeniDeger    Json?
+  aciklama     String?
+
+  @@index([otelId, tarihSaat])
+  @@index([kullaniciId, tarihSaat])
+}
+
+model OnayTalebi {
+  id                Int        @id @default(autoincrement())
+  talepEdenId       Int
+  talepEden         Kullanici  @relation("TalepEden", fields: [talepEdenId], references: [id])
+  otelId            Int
+  otel              Otel       @relation(fields: [otelId], references: [id])
+  tur               OnayTuru
+  hedefTablo        String
+  hedefKayitId      Int
+  istenenDegisiklik Json
+  durum             OnayDurumu @default(BEKLIYOR)
+  kararVerenId      Int?
+  kararVeren        Kullanici? @relation("KararVeren", fields: [kararVerenId], references: [id])
+  kararTarihi       DateTime?
+  kararAciklamasi   String?
+  createdAt         DateTime   @default(now())
+
+  @@index([otelId, durum])
+}
+
+// =====================================================================
+// RAW SQL — İLK MIGRATION'A EKLENECEK (Prisma bunu üretemez)
+// `prisma migrate dev --create-only` sonrası migration.sql dosyasına ekle:
+//
+// CREATE EXTENSION IF NOT EXISTS btree_gist;
+//
+// ALTER TABLE "Rezervasyon"
+//   ADD COLUMN tarih_araligi daterange
+//   GENERATED ALWAYS AS (daterange("girisTarihi", "cikisTarihi", '[)')) STORED;
+//
+// ALTER TABLE "Rezervasyon"
+//   ADD CONSTRAINT rezervasyon_cakisma_engeli
+//   EXCLUDE USING gist (
+//     "odaId" WITH =,
+//     tarih_araligi WITH &&
+//   )
+//   WHERE (durum <> 'IPTAL' AND "silindiMi" = false);
+//
+// Not: '[)' yarı-açık aralık → çıkış günü = yeni giriş günü çakışma sayılmaz.
+// Uygulama tarafında bu constraint ihlali yakalanıp Türkçe mesaja çevrilir:
+// "Bu oda seçilen tarih aralığında dolu. Farklı tarih veya oda seçin."
+// =====================================================================
