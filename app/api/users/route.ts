@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { jsonError, requireApiSession } from "@/lib/api";
+import { jsonError, prismaErrorResponse, requireApiSession } from "@/lib/api";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
@@ -16,7 +16,16 @@ export async function GET() {
   if (error || !session) return error;
   if (session.rol !== "SUPER_ADMIN") return jsonError("Kullanıcı listesini yalnızca SUPER_ADMIN görebilir.", 403);
   const users = await prisma.kullanici.findMany({
-    include: { otelYetkileri: true },
+    select: {
+      id: true,
+      adSoyad: true,
+      kullaniciAdi: true,
+      rol: true,
+      aktifMi: true,
+      createdAt: true,
+      updatedAt: true,
+      otelYetkileri: true
+    },
     orderBy: { adSoyad: "asc" }
   });
   return NextResponse.json({ users });
@@ -29,13 +38,31 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return jsonError("Kullanıcı bilgilerini kontrol edin.", 400);
 
-  const user = await prisma.kullanici.create({
-    data: {
-      adSoyad: parsed.data.adSoyad,
-      kullaniciAdi: parsed.data.kullaniciAdi,
-      sifreHash: await hashPassword(parsed.data.sifre),
-      rol: parsed.data.rol
-    }
-  });
-  return NextResponse.json({ user });
+  try {
+    const user = await prisma.kullanici.create({
+      data: {
+        adSoyad: parsed.data.adSoyad,
+        kullaniciAdi: parsed.data.kullaniciAdi,
+        sifreHash: await hashPassword(parsed.data.sifre),
+        rol: parsed.data.rol
+      },
+      select: {
+        id: true,
+        adSoyad: true,
+        kullaniciAdi: true,
+        rol: true,
+        aktifMi: true,
+        createdAt: true,
+        updatedAt: true,
+        otelYetkileri: true
+      }
+    });
+    return NextResponse.json({ user });
+  } catch (error) {
+    return (
+      prismaErrorResponse(error, {
+        unique: "Bu kullanıcı adı zaten kayıtlı."
+      }) ?? jsonError("Kullanıcı kaydedilemedi.", 500)
+    );
+  }
 }

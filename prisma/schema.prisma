@@ -332,6 +332,7 @@ model Rezervasyon {
   not           String?
   olusturanId   Int
   olusturan     Kullanici         @relation("RezervasyonOlusturan", fields: [olusturanId], references: [id])
+  tarihAraligi  Unsupported("daterange")? @map("tarih_araligi")
 
   cariHareketler CariHareket[]
 

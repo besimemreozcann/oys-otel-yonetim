@@ -7,7 +7,14 @@ export default async function UsersPage() {
   await requireSuperAdmin();
   const [users, hotels] = await Promise.all([
     prisma.kullanici.findMany({
-      include: { otelYetkileri: true },
+      select: {
+        id: true,
+        adSoyad: true,
+        kullaniciAdi: true,
+        rol: true,
+        aktifMi: true,
+        otelYetkileri: true
+      },
       orderBy: { adSoyad: "asc" }
     }),
     prisma.otel.findMany({

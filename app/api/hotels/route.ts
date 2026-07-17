@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { jsonError, requireApiSession } from "@/lib/api";
+import { jsonError, prismaErrorResponse, requireApiSession } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -33,18 +33,27 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return jsonError("Otel bilgilerini kontrol edin.", 400);
 
-  const company =
-    (await prisma.sirket.findFirst({ orderBy: { id: "asc" } })) ??
-    (await prisma.sirket.create({ data: { ad: "Ana Şirket" } }));
-  const hotel = await prisma.otel.create({
-    data: {
-      sirketId: company.id,
-      ad: parsed.data.ad,
-      adres: parsed.data.adres,
-      telefon: parsed.data.telefon,
-      eposta: parsed.data.eposta || null
-    }
-  });
+  try {
+    const company =
+      (await prisma.sirket.findFirst({ orderBy: { id: "asc" } })) ??
+      (await prisma.sirket.create({ data: { ad: "Ana Şirket" } }));
+    const hotel = await prisma.otel.create({
+      data: {
+        sirketId: company.id,
+        ad: parsed.data.ad,
+        adres: parsed.data.adres,
+        telefon: parsed.data.telefon,
+        eposta: parsed.data.eposta || null
+      }
+    });
 
-  return NextResponse.json({ hotel });
+    return NextResponse.json({ hotel });
+  } catch (error) {
+    return (
+      prismaErrorResponse(error, {
+        unique: "Bu otel zaten kayıtlı.",
+        foreignKey: "Şirket kaydı bulunamadı. Bilgileri kontrol edin."
+      }) ?? jsonError("Otel kaydedilemedi.", 500)
+    );
+  }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, requireApiSession } from "@/lib/api";
+import { intParam, jsonError, prismaErrorResponse, requireApiSession } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const permissionSchema = z.object({
@@ -29,20 +29,38 @@ export async function PUT(request: Request, { params }: RouteContext) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return jsonError("Yetki matrisi geçerli değil.", 400);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.kullaniciOtelYetkisi.deleteMany({ where: { kullaniciId } });
-    await tx.kullaniciOtelYetkisi.createMany({
-      data: parsed.data.permissions
-        .filter(
-          (permission) =>
-            permission.rezervasyonYetkisi !== "YOK" ||
-            permission.cariYetkisi !== "YOK" ||
-            permission.finansYetkisi !== "YOK" ||
-            permission.raporYetkisi !== "YOK"
-        )
-        .map((permission) => ({ kullaniciId, ...permission }))
-    });
+  const requestedHotelIds = [...new Set(parsed.data.permissions.map((permission) => permission.otelId))];
+  const existingHotelCount = await prisma.otel.count({
+    where: { id: { in: requestedHotelIds }, silindiMi: false }
   });
+
+  if (existingHotelCount !== requestedHotelIds.length) {
+    return jsonError("Yetki matrisinde geçersiz otel seçimi var.", 400);
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.kullaniciOtelYetkisi.deleteMany({ where: { kullaniciId } });
+      await tx.kullaniciOtelYetkisi.createMany({
+        data: parsed.data.permissions
+          .filter(
+            (permission) =>
+              permission.rezervasyonYetkisi !== "YOK" ||
+              permission.cariYetkisi !== "YOK" ||
+              permission.finansYetkisi !== "YOK" ||
+              permission.raporYetkisi !== "YOK"
+          )
+          .map((permission) => ({ kullaniciId, ...permission }))
+      });
+    });
+  } catch (error) {
+    return (
+      prismaErrorResponse(error, {
+        unique: "Bu kullanıcı için aynı otel yetkisi birden fazla kez gönderildi.",
+        foreignKey: "Kullanıcı veya otel kaydı bulunamadı."
+      }) ?? jsonError("Yetki matrisi kaydedilemedi.", 500)
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

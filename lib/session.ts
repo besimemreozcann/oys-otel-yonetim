@@ -14,7 +14,15 @@ export type SessionUser = {
 };
 
 function getSecret() {
-  const secret = process.env.AUTH_SECRET ?? "gelistirme-ortami-icin-gecici-secret-degeri";
+  if (process.env.AUTH_SECRET) {
+    return new TextEncoder().encode(process.env.AUTH_SECRET);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET production ortamında zorunludur.");
+  }
+
+  const secret = "gelistirme-ortami-icin-gecici-secret-degeri";
   return new TextEncoder().encode(secret);
 }
 

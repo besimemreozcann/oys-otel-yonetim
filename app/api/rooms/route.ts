@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { jsonError, requireApiHotelPermission } from "@/lib/api";
+import { jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -23,8 +23,17 @@ export async function POST(request: Request) {
   });
   if (!floor) return jsonError("Seçilen kat bu otele ait değil.", 400);
 
-  const room = await prisma.oda.create({
-    data: parsed.data
-  });
-  return NextResponse.json({ room });
+  try {
+    const room = await prisma.oda.create({
+      data: parsed.data
+    });
+    return NextResponse.json({ room });
+  } catch (error) {
+    return (
+      prismaErrorResponse(error, {
+        unique: "Bu oda numarası bu otelde zaten kayıtlı.",
+        foreignKey: "Seçilen otel veya kat bulunamadı."
+      }) ?? jsonError("Oda kaydedilemedi.", 500)
+    );
+  }
 }

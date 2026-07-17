@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { readSession } from "@/lib/session";
 import { hasHotelPermission, type PermissionDomain } from "@/lib/authz";
@@ -13,6 +14,25 @@ export function intParam(value: string | null, name: string) {
     throw new Error(`${name} geçerli değil.`);
   }
   return parsed;
+}
+
+type PrismaErrorMessages = {
+  unique?: string;
+  foreignKey?: string;
+};
+
+export function prismaErrorResponse(error: unknown, messages: PrismaErrorMessages = {}) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return null;
+
+  if (error.code === "P2002") {
+    return jsonError(messages.unique ?? "Bu kayıt zaten mevcut.", 409);
+  }
+
+  if (error.code === "P2003") {
+    return jsonError(messages.foreignKey ?? "İlişkili kayıt bulunamadı. Bilgileri kontrol edin.", 400);
+  }
+
+  return null;
 }
 
 export async function requireApiSession() {

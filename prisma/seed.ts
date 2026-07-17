@@ -3,6 +3,10 @@ import { hashPassword } from "../lib/password";
 
 const prisma = new PrismaClient();
 
+function seedIban(hotelId: number) {
+  return `TR${String(10 + hotelId).padStart(2, "0")}000100000000000000000${hotelId}`;
+}
+
 async function main() {
   await prisma.$transaction(async (tx) => {
     const sirket = await tx.sirket.upsert({
@@ -64,53 +68,51 @@ async function main() {
           tur: "BANKA",
           ad: "Ana Banka Hesabı",
           bankaAdi: "Ziraat Bankası",
-          iban: `TR${String(100000000000000000000000 + hotel.id)}`
+          iban: seedIban(hotel.id)
         }
       });
     }
 
-    const [superAdmin, admin, personelA, personelB] = await Promise.all([
-      tx.kullanici.upsert({
-        where: { kullaniciAdi: "superadmin" },
-        update: { aktifMi: true },
-        create: {
-          adSoyad: "Süper Admin",
-          kullaniciAdi: "superadmin",
-          sifreHash: await hashPassword("SuperAdmin123!"),
-          rol: "SUPER_ADMIN"
-        }
-      }),
-      tx.kullanici.upsert({
-        where: { kullaniciAdi: "admin" },
-        update: { aktifMi: true },
-        create: {
-          adSoyad: "Otel Admin",
-          kullaniciAdi: "admin",
-          sifreHash: await hashPassword("Admin123!"),
-          rol: "ADMIN"
-        }
-      }),
-      tx.kullanici.upsert({
-        where: { kullaniciAdi: "personel.a" },
-        update: { aktifMi: true },
-        create: {
-          adSoyad: "Personel A",
-          kullaniciAdi: "personel.a",
-          sifreHash: await hashPassword("Personel123!"),
-          rol: "PERSONEL"
-        }
-      }),
-      tx.kullanici.upsert({
-        where: { kullaniciAdi: "personel.b" },
-        update: { aktifMi: true },
-        create: {
-          adSoyad: "Personel B",
-          kullaniciAdi: "personel.b",
-          sifreHash: await hashPassword("Personel123!"),
-          rol: "PERSONEL"
-        }
-      })
-    ]);
+    const superAdmin = await tx.kullanici.upsert({
+      where: { kullaniciAdi: "superadmin" },
+      update: { aktifMi: true },
+      create: {
+        adSoyad: "Süper Admin",
+        kullaniciAdi: "superadmin",
+        sifreHash: await hashPassword("SuperAdmin123!"),
+        rol: "SUPER_ADMIN"
+      }
+    });
+    const admin = await tx.kullanici.upsert({
+      where: { kullaniciAdi: "admin" },
+      update: { aktifMi: true },
+      create: {
+        adSoyad: "Otel Admin",
+        kullaniciAdi: "admin",
+        sifreHash: await hashPassword("Admin123!"),
+        rol: "ADMIN"
+      }
+    });
+    const personelA = await tx.kullanici.upsert({
+      where: { kullaniciAdi: "personel.a" },
+      update: { aktifMi: true },
+      create: {
+        adSoyad: "Personel A",
+        kullaniciAdi: "personel.a",
+        sifreHash: await hashPassword("Personel123!"),
+        rol: "PERSONEL"
+      }
+    });
+    const personelB = await tx.kullanici.upsert({
+      where: { kullaniciAdi: "personel.b" },
+      update: { aktifMi: true },
+      create: {
+        adSoyad: "Personel B",
+        kullaniciAdi: "personel.b",
+        sifreHash: await hashPassword("Personel123!"),
+        rol: "PERSONEL"
+      }
+    });
 
     for (const hotel of hotels) {
       await tx.kullaniciOtelYetkisi.upsert({

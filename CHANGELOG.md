@@ -2,7 +2,7 @@
 
 ## 0.1.0 - Faz 1
 
-- Next.js 14 App Router, TypeScript, Tailwind CSS ve shadcn/ui uyumlu yerel UI bileşenleri eklendi.
+- Next.js 16 App Router, TypeScript, Tailwind CSS ve shadcn/ui uyumlu yerel UI bileşenleri eklendi.
 - Sağlanan Prisma şeması `prisma/schema.prisma` konumuna taşındı.
 - Docker Compose ile PostgreSQL 16 ve app servisleri tanımlandı.
 - Kullanıcı adı/şifre girişi, ilk kullanıcı kurulumu ve "beni hatırla" oturumu eklendi.
