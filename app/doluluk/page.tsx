@@ -1,12 +1,23 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { formatDateTR, dateOnly, todayIstanbulDateString } from "@/lib/faz3";
+import { dateOnly, formatDateTR, todayIstanbulDateString } from "@/lib/faz3";
 import { hasHotelPermission } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 
 type PageProps = {
-  searchParams: Promise<{ otelId?: string; katId?: string; baslangic?: string }>;
+  searchParams: Promise<{ otelId?: string; katId?: string; baslangic?: string; mod?: string }>;
+};
+
+type ReservationForCalendar = {
+  id: number;
+  odaId: number;
+  girisTarihi: Date;
+  cikisTarihi: Date;
+  durum: "BEKLEMEDE" | "ONAYLANDI" | "GIRIS_YAPILDI" | "CIKIS_YAPILDI" | "IPTAL";
+  kisiSayisi: number;
+  toplamTutar: { toString(): string };
+  cari: { ad: string };
 };
 
 function addDays(value: Date, days: number) {
@@ -19,9 +30,46 @@ function isoDate(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function dayKey(value: Date) {
+  return new Intl.DateTimeFormat("tr-TR", { weekday: "short", day: "2-digit", month: "short" }).format(value);
+}
+
 function overlaps(day: Date, reservation: { girisTarihi: Date; cikisTarihi: Date }) {
   const next = addDays(day, 1);
   return reservation.girisTarihi < next && reservation.cikisTarihi > day;
+}
+
+function statusMeta(reservation: ReservationForCalendar | undefined) {
+  if (!reservation) {
+    return {
+      label: "Boş",
+      shortLabel: "Boş",
+      cellClass: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+      cardClass: "border-emerald-200 bg-emerald-50 text-emerald-800"
+    };
+  }
+
+  if (reservation.durum === "GIRIS_YAPILDI") {
+    return {
+      label: "Dolu",
+      shortLabel: "Dolu",
+      cellClass: "border-red-200 bg-red-100 text-red-800",
+      cardClass: "border-red-200 bg-red-50 text-red-800"
+    };
+  }
+
+  return {
+    label: reservation.durum === "BEKLEMEDE" ? "Beklemede" : "Rezerve",
+    shortLabel: reservation.durum === "BEKLEMEDE" ? "Bek." : "Rez.",
+    cellClass: "border-amber-200 bg-amber-100 text-amber-900",
+    cardClass: "border-amber-200 bg-amber-50 text-amber-900"
+  };
+}
+
+function modeHref(mod: "genis" | "gun", selectedHotelId: number, selectedFloorId: number | undefined, start: Date) {
+  const params = new URLSearchParams({ otelId: String(selectedHotelId), baslangic: isoDate(start), mod });
+  if (selectedFloorId) params.set("katId", String(selectedFloorId));
+  return `/doluluk?${params.toString()}`;
 }
 
 export default async function DolulukPage({ searchParams }: PageProps) {
@@ -54,9 +102,10 @@ export default async function DolulukPage({ searchParams }: PageProps) {
     );
   }
 
+  const mode = params.mod === "gun" ? "gun" : "genis";
   const start = dateOnly(params.baslangic ?? todayIstanbulDateString());
-  const days = Array.from({ length: 30 }, (_, index) => addDays(start, index));
-  const end = addDays(start, 30);
+  const days = Array.from({ length: mode === "gun" ? 1 : 30 }, (_, index) => addDays(start, index));
+  const end = addDays(start, mode === "gun" ? 1 : 30);
   const selectedFloorId = params.katId ? Number(params.katId) : undefined;
 
   const [floors, rooms, reservations] = await Promise.all([
@@ -79,15 +128,21 @@ export default async function DolulukPage({ searchParams }: PageProps) {
     })
   ]);
 
+  const selectedDay = days[0];
+  const previousDay = addDays(start, -1);
+  const nextDay = addDays(start, 1);
+
   return (
     <AppShell selectedHotelId={selectedHotel.id} hotelSelectorAction="/doluluk">
       <div className="grid gap-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Doluluk Takvimi</h1>
-            <p className="mt-1 text-sm text-muted">Oda × tarih görünümü. Hücreye tıklayınca yeni rezervasyon formu açılır.</p>
+            <p className="mt-1 text-sm text-muted">
+              Geniş görünüm 30 günlük planı, gün görünümü seçili günün oda durumlarını gösterir.
+            </p>
           </div>
-          <form action="/doluluk" className="flex items-center gap-2">
+          <form action="/doluluk" className="flex flex-wrap items-center justify-end gap-2">
             <select className="h-9 rounded-md border border-border bg-white px-3 text-sm" name="otelId" defaultValue={selectedHotel.id}>
               {visibleHotels.map((hotel) => (
                 <option key={hotel.id} value={hotel.id}>
@@ -104,61 +159,161 @@ export default async function DolulukPage({ searchParams }: PageProps) {
               ))}
             </select>
             <input className="h-9 rounded-md border border-border px-3 text-sm" name="baslangic" type="date" defaultValue={isoDate(start)} />
+            <select className="h-9 rounded-md border border-border bg-white px-3 text-sm" name="mod" defaultValue={mode}>
+              <option value="genis">Geniş görünüm</option>
+              <option value="gun">Gün görünümü</option>
+            </select>
             <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white" type="submit">
               Göster
             </button>
           </form>
         </div>
 
-        <section className="overflow-hidden rounded-md border border-border bg-surface shadow-table">
-          <div className="overflow-x-auto">
-            <table className="min-w-[1200px] text-sm">
-              <thead className="bg-[#eef3f6] text-left text-xs uppercase text-muted">
-                <tr>
-                  <th className="sticky left-0 z-10 bg-[#eef3f6] px-3 py-2">Oda</th>
-                  {days.map((day) => (
-                    <th key={isoDate(day)} className="px-2 py-2 text-center">
-                      {new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short" }).format(day)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rooms.map((room) => (
-                  <tr key={room.id} className="border-t border-border">
-                    <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-medium">
-                      {room.kat.ad} / {room.odaNo}
-                    </td>
-                    {days.map((day) => {
-                      const reservation = reservations.find((item) => item.odaId === room.id && overlaps(day, item));
-                      const occupied = reservation?.durum === "GIRIS_YAPILDI";
-                      const reserved = reservation && !occupied;
-                      return (
-                        <td key={isoDate(day)} className="p-1">
-                          {reservation ? (
-                            <div
-                              className={`h-8 rounded-sm px-2 py-1 text-xs ${occupied ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}
-                              title={`${reservation.cari.ad} · ${formatDateTR(reservation.girisTarihi)} - ${formatDateTR(reservation.cikisTarihi)}`}
-                            >
-                              {reservation.cari.ad}
-                            </div>
-                          ) : (
-                            <Link
-                              className="block h-8 rounded-sm border border-emerald-100 bg-white px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
-                              href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&odaId=${room.id}&tarih=${isoDate(day)}`}
-                            >
-                              Boş
-                            </Link>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3 text-sm">
+          <div className="flex items-center gap-2">
+            <Link
+              className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft"
+              href={modeHref("genis", selectedHotel.id, selectedFloorId, start)}
+            >
+              Geniş görünüm
+            </Link>
+            <Link
+              className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft"
+              href={modeHref("gun", selectedHotel.id, selectedFloorId, start)}
+            >
+              Gün görünümü
+            </Link>
           </div>
-        </section>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-emerald-100 ring-1 ring-emerald-200" />
+              Boş
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-amber-100 ring-1 ring-amber-200" />
+              Rezerve/Beklemede
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-red-100 ring-1 ring-red-200" />
+              Dolu
+            </span>
+          </div>
+        </div>
+
+        {mode === "genis" ? (
+          <section className="overflow-hidden rounded-md border border-border bg-surface shadow-table">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="font-semibold">30 Günlük Geniş Plan</h2>
+              <p className="mt-1 text-sm text-muted">Boş hücreler yeni rezervasyon formuna gider. Dolu hücrelerde cari ve tarih bilgisi görünür.</p>
+            </div>
+            <div className="max-h-[70vh] overflow-auto">
+              <table className="min-w-[1760px] border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 top-0 z-30 w-36 border-b border-r border-border bg-[#eef3f6] px-3 py-3 text-left text-xs uppercase text-muted">
+                      Oda
+                    </th>
+                    {days.map((day) => (
+                      <th key={isoDate(day)} className="sticky top-0 z-20 w-14 border-b border-border bg-[#eef3f6] px-2 py-3 text-center">
+                        <div className="font-semibold text-foreground">{new Intl.DateTimeFormat("tr-TR", { day: "2-digit" }).format(day)}</div>
+                        <div className="text-[11px] uppercase text-muted">{new Intl.DateTimeFormat("tr-TR", { month: "short" }).format(day)}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rooms.map((room) => (
+                    <tr key={room.id} className="border-t border-border">
+                      <td className="sticky left-0 z-10 border-b border-r border-border bg-surface px-3 py-3">
+                        <div className="font-semibold">{room.odaNo}</div>
+                        <div className="text-xs text-muted">{room.kat.ad}</div>
+                        <div className="text-xs text-muted">{room.kapasite} kişi</div>
+                      </td>
+                      {days.map((day) => {
+                        const reservation = reservations.find((item) => item.odaId === room.id && overlaps(day, item));
+                        const meta = statusMeta(reservation);
+                        return (
+                          <td key={isoDate(day)} className="border-b border-border p-1 align-middle">
+                            {reservation ? (
+                              <div className={`h-10 rounded-sm border px-1.5 py-1 text-center text-[11px] leading-tight ${meta.cellClass}`}>
+                                <div className="font-semibold">{meta.shortLabel}</div>
+                                <div className="truncate" title={reservation.cari.ad}>
+                                  {reservation.cari.ad}
+                                </div>
+                              </div>
+                            ) : (
+                              <Link
+                                className={`block h-10 rounded-sm border px-1.5 py-2 text-center text-[11px] ${meta.cellClass}`}
+                                href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&odaId=${room.id}&tarih=${isoDate(day)}`}
+                              >
+                                Boş
+                              </Link>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <section className="grid gap-4">
+            <div className="flex items-center justify-between rounded-md border border-border bg-surface px-4 py-3">
+              <Link className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accentSoft" href={modeHref("gun", selectedHotel.id, selectedFloorId, previousDay)}>
+                Önceki gün
+              </Link>
+              <div className="text-center">
+                <h2 className="text-xl font-semibold">{dayKey(selectedDay)}</h2>
+                <p className="text-sm text-muted">{formatDateTR(selectedDay)}</p>
+              </div>
+              <Link className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accentSoft" href={modeHref("gun", selectedHotel.id, selectedFloorId, nextDay)}>
+                Sonraki gün
+              </Link>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {rooms.map((room) => {
+                const reservation = reservations.find((item) => item.odaId === room.id && overlaps(selectedDay, item));
+                const meta = statusMeta(reservation);
+                return (
+                  <article key={room.id} className={`rounded-md border p-4 ${meta.cardClass}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs uppercase opacity-75">{room.kat.ad}</div>
+                        <h3 className="mt-1 text-xl font-semibold">Oda {room.odaNo}</h3>
+                        <p className="text-sm opacity-80">
+                          {room.odaTipi ?? "Oda"} · {room.kapasite} kişi
+                        </p>
+                      </div>
+                      <span className="rounded-md bg-white/70 px-2 py-1 text-sm font-semibold">{meta.label}</span>
+                    </div>
+
+                    {reservation ? (
+                      <div className="mt-4 grid gap-1 text-sm">
+                        <div className="font-medium">{reservation.cari.ad}</div>
+                        <div>
+                          {formatDateTR(reservation.girisTarihi)} - {formatDateTR(reservation.cikisTarihi)}
+                        </div>
+                        <div>{reservation.kisiSayisi} kişi</div>
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <Link
+                          className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-white"
+                          href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&odaId=${room.id}&tarih=${isoDate(selectedDay)}`}
+                        >
+                          Bu güne rezervasyon ekle
+                        </Link>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </div>
     </AppShell>
   );
