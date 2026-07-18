@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, requireApiHotelPermission, requireApiSession } from "@/lib/api";
+import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission, requireApiSession } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -23,14 +23,22 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return jsonError("Otel bilgilerini kontrol edin.", 400);
 
-  const hotel = await prisma.otel.update({
-    where: { id },
-    data: {
-      ...parsed.data,
-      eposta: parsed.data.eposta || null
-    }
-  });
-  return NextResponse.json({ hotel });
+  try {
+    const hotel = await prisma.otel.update({
+      where: { id },
+      data: {
+        ...parsed.data,
+        eposta: parsed.data.eposta || null
+      }
+    });
+    return NextResponse.json({ hotel });
+  } catch (error) {
+    return (
+      prismaErrorResponse(error, {
+        unique: "Bu otel adı zaten kayıtlı."
+      }) ?? jsonError("Otel güncellenemedi.", 500)
+    );
+  }
 }
 
 export async function DELETE(_request: Request, { params }: RouteContext) {
