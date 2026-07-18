@@ -399,6 +399,7 @@ export function KrokiEditor({
                 </p>
               </div>
               <form
+                key={selectedRoom.id}
                 className="grid gap-2"
                 action={(formData) => {
                   void changeStatus(formData);
