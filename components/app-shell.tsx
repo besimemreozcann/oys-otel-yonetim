@@ -1,4 +1,4 @@
-import { Building2, Hotel, Users } from "lucide-react";
+import { Building2, CalendarDays, Hotel, LayoutGrid, Users, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
@@ -22,6 +22,17 @@ export async function AppShell({ children, selectedHotelId, hotelSelectorAction 
     session.rol === "SUPER_ADMIN"
       ? allHotels
       : allHotels.filter((hotel) => permissions.some((permission) => permission.otelId === hotel.id));
+  const canSeeCariler =
+    session.rol === "SUPER_ADMIN" ||
+    permissions.some((permission) => permission.cariYetkisi === "GORUNTULE" || permission.cariYetkisi === "TAHSILAT" || permission.cariYetkisi === "TAM");
+  const canSeeRezervasyonlar =
+    session.rol === "SUPER_ADMIN" ||
+    permissions.some(
+      (permission) =>
+        permission.rezervasyonYetkisi === "GORUNTULE" ||
+        permission.rezervasyonYetkisi === "EKLE" ||
+        permission.rezervasyonYetkisi === "TAM"
+    );
 
   const currentHotelId = selectedHotelId ?? visibleHotels[0]?.id;
 
@@ -50,6 +61,24 @@ export async function AppShell({ children, selectedHotelId, hotelSelectorAction 
             <Hotel className="h-4 w-4" />
             Kroki
           </Link>
+          {canSeeCariler ? (
+            <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/cariler">
+              <WalletCards className="h-4 w-4" />
+              Cariler
+            </Link>
+          ) : null}
+          {canSeeRezervasyonlar ? (
+            <>
+              <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/rezervasyonlar">
+                <CalendarDays className="h-4 w-4" />
+                Rezervasyonlar
+              </Link>
+              <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/doluluk">
+                <LayoutGrid className="h-4 w-4" />
+                Doluluk
+              </Link>
+            </>
+          ) : null}
           {session.rol === "SUPER_ADMIN" ? (
             <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/users">
               <Users className="h-4 w-4" />
