@@ -48,18 +48,19 @@ export function UserAdmin({ users, hotels }: { users: User[]; hotels: Hotel[] })
 
   async function createUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setMessage("");
     const response = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget).entries()))
+      body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setMessage(payload.message ?? "Kullanıcı kaydedilemedi.");
       return;
     }
-    event.currentTarget.reset();
+    form.reset();
     setMessage("Kullanıcı kaydedildi.");
     router.refresh();
   }

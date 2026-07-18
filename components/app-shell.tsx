@@ -1,6 +1,5 @@
 import { Building2, Hotel, Users } from "lucide-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 
@@ -22,10 +21,6 @@ export async function AppShell({ children, selectedHotelId }: AppShellProps) {
     session.rol === "SUPER_ADMIN"
       ? allHotels
       : allHotels.filter((hotel) => permissions.some((permission) => permission.otelId === hotel.id));
-
-  if (!visibleHotels.length && session.rol !== "SUPER_ADMIN") {
-    redirect("/login");
-  }
 
   const currentHotelId = selectedHotelId ?? visibleHotels[0]?.id;
 
@@ -60,26 +55,30 @@ export async function AppShell({ children, selectedHotelId }: AppShellProps) {
       </aside>
       <div className="min-w-0">
         <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6">
-          <form className="flex items-center gap-2" action="/dashboard">
-            <label className="text-sm font-medium text-muted" htmlFor="otelId">
-              Otel
-            </label>
-            <select
-              className="h-9 min-w-64 rounded-md border border-border bg-white px-3 text-sm"
-              defaultValue={currentHotelId}
-              id="otelId"
-              name="otelId"
-            >
-              {visibleHotels.map((hotel) => (
-                <option key={hotel.id} value={hotel.id}>
-                  {hotel.ad}
-                </option>
-              ))}
-            </select>
-            <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white" type="submit">
-              Seç
-            </button>
-          </form>
+          {visibleHotels.length ? (
+            <form className="flex items-center gap-2" action="/dashboard">
+              <label className="text-sm font-medium text-muted" htmlFor="otelId">
+                Otel
+              </label>
+              <select
+                className="h-9 min-w-64 rounded-md border border-border bg-white px-3 text-sm"
+                defaultValue={currentHotelId}
+                id="otelId"
+                name="otelId"
+              >
+                {visibleHotels.map((hotel) => (
+                  <option key={hotel.id} value={hotel.id}>
+                    {hotel.ad}
+                  </option>
+                ))}
+              </select>
+              <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white" type="submit">
+                Seç
+              </button>
+            </form>
+          ) : (
+            <div className="text-sm font-medium text-danger">Yetkili otel bulunamadı.</div>
+          )}
           <div className="flex items-center gap-3 text-sm">
             <span>
               {session.adSoyad} · {session.rol.replace("_", " ")}
@@ -91,7 +90,18 @@ export async function AppShell({ children, selectedHotelId }: AppShellProps) {
             </form>
           </div>
         </header>
-        <main className="p-6">{children}</main>
+        <main className="p-6">
+          {!visibleHotels.length && session.rol !== "SUPER_ADMIN" ? (
+            <section className="rounded-md border border-border bg-surface p-4">
+              <h1 className="text-xl font-semibold">Yetkili otel bulunamadı</h1>
+              <p className="mt-2 text-sm text-muted">
+                Bu kullanıcı için aktif bir otel yetkisi yok. Lütfen SUPER_ADMIN kullanıcısından yetki ataması isteyin.
+              </p>
+            </section>
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </div>
   );
