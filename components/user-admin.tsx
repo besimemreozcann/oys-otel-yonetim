@@ -36,14 +36,31 @@ export function UserAdmin({ users, hotels }: { users: User[]; hotels: Hotel[] })
   const [selectedUserId, setSelectedUserId] = useState(users[0]?.id ?? 0);
   const [message, setMessage] = useState("");
   const selectedUser = users.find((user) => user.id === selectedUserId);
+  const selectedUserHasPermissions = Boolean(selectedUser?.otelYetkileri.length);
   const columns = useMemo<ColumnDef<User>[]>(
     () => [
       { accessorKey: "adSoyad", header: "Ad soyad" },
       { accessorKey: "kullaniciAdi", header: "Kullanıcı adı" },
       { accessorKey: "rol", header: "Rol" },
-      { accessorFn: (row) => (row.aktifMi ? "Aktif" : "Pasif"), id: "aktif", header: "Durum" }
+      { accessorFn: (row) => (row.aktifMi ? "Aktif" : "Pasif"), id: "aktif", header: "Durum" },
+      {
+        id: "islem",
+        header: "İşlem",
+        cell: ({ row }) => (
+          <Button
+            type="button"
+            variant={row.original.id === selectedUserId ? "primary" : "secondary"}
+            onClick={() => {
+              setSelectedUserId(row.original.id);
+              setMessage(`${row.original.adSoyad} düzenleniyor.`);
+            }}
+          >
+            Yetki düzenle
+          </Button>
+        )
+      }
     ],
-    []
+    [selectedUserId]
   );
 
   async function createUser(event: React.FormEvent<HTMLFormElement>) {
@@ -61,7 +78,34 @@ export function UserAdmin({ users, hotels }: { users: User[]; hotels: Hotel[] })
       return;
     }
     form.reset();
-    setMessage("Kullanıcı kaydedildi.");
+    if (payload.user?.id) {
+      setSelectedUserId(payload.user.id);
+    }
+    setMessage("Kullanıcı kaydedildi. Otel yetkilerini aşağıdaki matristen atayın.");
+    router.refresh();
+  }
+
+  async function updateUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedUser) return;
+    setMessage("");
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      adSoyad: String(form.get("adSoyad") ?? ""),
+      aktifMi: form.get("aktifMi") === "true",
+      ...(selectedUser.rol === "SUPER_ADMIN" ? {} : { rol: String(form.get("rol") ?? selectedUser.rol) })
+    };
+    const response = await fetch(`/api/users/${selectedUser.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(result.message ?? "Kullanıcı güncellenemedi.");
+      return;
+    }
+    setMessage("Kullanıcı bilgileri güncellendi.");
     router.refresh();
   }
 
@@ -122,7 +166,14 @@ export function UserAdmin({ users, hotels }: { users: User[]; hotels: Hotel[] })
 
       <section className="grid gap-3 rounded-md border border-border bg-surface p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Otel ve işlem yetki matrisi</h2>
+          <div>
+            <h2 className="text-base font-semibold">Kullanıcı ve yetki düzenleme</h2>
+            {selectedUser ? (
+              <p className="mt-1 text-sm text-muted">
+                Seçili kullanıcı: {selectedUser.adSoyad} ({selectedUser.kullaniciAdi})
+              </p>
+            ) : null}
+          </div>
           <Select
             className="max-w-xs"
             value={selectedUserId}
@@ -135,7 +186,37 @@ export function UserAdmin({ users, hotels }: { users: User[]; hotels: Hotel[] })
             ))}
           </Select>
         </div>
-        <form onSubmit={savePermissions}>
+
+        {selectedUser && !selectedUserHasPermissions && selectedUser.rol !== "SUPER_ADMIN" ? (
+          <div className="rounded-md border border-accent bg-accentSoft px-3 py-2 text-sm">
+            Bu kullanıcının henüz otel yetkisi yok. Giriş yaptığında ana ekranda yetki uyarısı görür; aşağıdaki
+            matristen en az bir otel için yetki verip kaydedin.
+          </div>
+        ) : null}
+
+        {selectedUser ? (
+          <form key={`user-${selectedUser.id}`} className="grid grid-cols-[1fr_180px_160px_auto] gap-3" onSubmit={updateUser}>
+            <Input name="adSoyad" defaultValue={selectedUser.adSoyad} placeholder="Ad soyad" required />
+            {selectedUser.rol === "SUPER_ADMIN" ? (
+              <Input value="SUPER_ADMIN" readOnly />
+            ) : (
+              <Select name="rol" defaultValue={selectedUser.rol}>
+                <option value="ADMIN">ADMIN</option>
+                <option value="PERSONEL">PERSONEL</option>
+              </Select>
+            )}
+            <Select name="aktifMi" defaultValue={String(selectedUser.aktifMi)}>
+              <option value="true">Aktif</option>
+              <option value="false">Pasif</option>
+            </Select>
+            <Button type="submit">
+              <Save className="h-4 w-4" />
+              Bilgileri kaydet
+            </Button>
+          </form>
+        ) : null}
+
+        <form key={`permissions-${selectedUser?.id ?? "none"}`} onSubmit={savePermissions}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-[#eef3f6] text-left text-xs uppercase text-muted">
