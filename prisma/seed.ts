@@ -183,7 +183,7 @@ async function main() {
         aciklama: "Faz 1 seed verisi oluşturuldu."
       }
     });
-  });
+  }, { timeout: 30000 });
 }
 
 main()

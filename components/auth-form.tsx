@@ -47,7 +47,7 @@ export function AuthForm({ hasUsers }: AuthFormProps) {
       ) : null}
       <label className="grid gap-1 text-sm font-medium">
         Kullanıcı adı
-        <Input autoComplete="username" name="kullaniciAdi" placeholder="superadmin" required />
+        <Input autoComplete="username" name="kullaniciAdi" placeholder="Kullanıcı adınızı yazın" required />
       </label>
       <label className="grid gap-1 text-sm font-medium">
         Şifre
