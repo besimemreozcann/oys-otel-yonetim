@@ -21,7 +21,7 @@ type RouteContext = {
 };
 
 export async function PUT(request: Request, { params }: RouteContext) {
-  const { hotelId: rawHotelId, floorId: rawFloorId } = await params;
+  const { id: rawHotelId, floorId: rawFloorId } = await params;
   const otelId = intParam(rawHotelId, "Otel");
   const katId = intParam(rawFloorId, "Kat");
 
