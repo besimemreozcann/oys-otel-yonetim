@@ -2,6 +2,9 @@
 set -e
 
 npx prisma migrate deploy
-npx prisma db seed
+
+if [ "${RUN_SEED:-false}" = "true" ]; then
+  npx prisma db seed
+fi
 
 exec "$@"
