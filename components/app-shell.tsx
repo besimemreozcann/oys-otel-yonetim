@@ -6,9 +6,10 @@ import { requireSession } from "@/lib/session";
 type AppShellProps = {
   children: React.ReactNode;
   selectedHotelId?: number;
+  hotelSelectorAction?: string;
 };
 
-export async function AppShell({ children, selectedHotelId }: AppShellProps) {
+export async function AppShell({ children, selectedHotelId, hotelSelectorAction = "/dashboard" }: AppShellProps) {
   const session = await requireSession();
   const allHotels = await prisma.otel.findMany({
     where: { silindiMi: false, aktifMi: true },
@@ -45,6 +46,10 @@ export async function AppShell({ children, selectedHotelId }: AppShellProps) {
             <Building2 className="h-4 w-4" />
             Otel, kat ve oda
           </Link>
+          <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/kroki">
+            <Hotel className="h-4 w-4" />
+            Kroki
+          </Link>
           {session.rol === "SUPER_ADMIN" ? (
             <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/users">
               <Users className="h-4 w-4" />
@@ -56,7 +61,7 @@ export async function AppShell({ children, selectedHotelId }: AppShellProps) {
       <div className="min-w-0">
         <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6">
           {visibleHotels.length ? (
-            <form className="flex items-center gap-2" action="/dashboard">
+            <form className="flex items-center gap-2" action={hotelSelectorAction}>
               <label className="text-sm font-medium text-muted" htmlFor="otelId">
                 Otel
               </label>

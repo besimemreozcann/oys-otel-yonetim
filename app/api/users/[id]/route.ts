@@ -10,7 +10,7 @@ const schema = z.object({
 });
 
 type RouteContext = {
-  params: Promise<{ id: string }>;
+  params: Promise<any>;
 };
 
 export async function PATCH(request: Request, { params }: RouteContext) {

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { readSession } from "@/lib/session";
 import { hasHotelPermission, type PermissionDomain } from "@/lib/authz";
+import { hasHotelAccess } from "@/lib/kroki";
 
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ message }, { status });
@@ -58,6 +59,21 @@ export async function requireApiHotelPermission(
 
   if (!decision.allowed) {
     return { error: jsonError(decision.message, decision.status), session: null };
+  }
+
+  return { error: null, session };
+}
+
+export async function requireApiHotelAccess(otelId: number) {
+  const { error, session } = await requireApiSession();
+  if (error || !session) return { error, session: null };
+
+  const permissions = await prisma.kullaniciOtelYetkisi.findMany({
+    where: { kullaniciId: session.id }
+  });
+
+  if (!hasHotelAccess(session, permissions, otelId)) {
+    return { error: jsonError("Bu otele erişim yetkiniz yok.", 403), session: null };
   }
 
   return { error: null, session };

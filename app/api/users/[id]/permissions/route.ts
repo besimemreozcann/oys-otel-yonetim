@@ -16,7 +16,7 @@ const schema = z.object({
 });
 
 type RouteContext = {
-  params: Promise<{ id: string }>;
+  params: Promise<any>;
 };
 
 export async function PUT(request: Request, { params }: RouteContext) {
