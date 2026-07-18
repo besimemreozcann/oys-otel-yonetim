@@ -12,7 +12,7 @@ async function main() {
     const sirket = await tx.sirket.upsert({
       where: { id: 1 },
       update: { ad: "OYS Turizm A.Ş." },
-      create: { ad: "OYS Turizm A.Ş." }
+      create: { id: 1, ad: "OYS Turizm A.Ş." }
     });
 
     const hotelNames = ["Mavi Kıyı Otel", "Petrol Park Otel", "Anka Şehir Otel"];
@@ -22,6 +22,7 @@ async function main() {
         where: { id: index + 1 },
         update: { ad, sirketId: sirket.id, aktifMi: true, silindiMi: false },
         create: {
+          id: index + 1,
           sirketId: sirket.id,
           ad,
           adres: `${index + 1}. Cadde No:${10 + index}`,
@@ -164,6 +165,7 @@ async function main() {
         where: { id: cariList.findIndex((item) => item[0] === ad) + 1 },
         update: { ad, tur },
         create: {
+          id: cariList.findIndex((item) => item[0] === ad) + 1,
           ad,
           tur,
           telefon: "0212 555 44 33",
@@ -183,6 +185,10 @@ async function main() {
         aciklama: "Faz 1 seed verisi oluşturuldu."
       }
     });
+
+    await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"Sirket"', 'id'), COALESCE((SELECT MAX(id) FROM "Sirket"), 1), true)`);
+    await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"Otel"', 'id'), COALESCE((SELECT MAX(id) FROM "Otel"), 1), true)`);
+    await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"Cari"', 'id'), COALESCE((SELECT MAX(id) FROM "Cari"), 1), true)`);
   }, { timeout: 30000 });
 }
 
