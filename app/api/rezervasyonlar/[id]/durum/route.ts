@@ -81,7 +81,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
           durum: { in: ["BEKLEMEDE", "ONAYLANDI", "GIRIS_YAPILDI"] }
         }
       });
-      if (otherActive > 0) nextRoomStatus = rezervasyon.odaId ? "REZERVE" : "BOS";
+      nextRoomStatus = otherActive > 0 ? "REZERVE" : "BOS";
     }
 
     await tx.oda.update({
