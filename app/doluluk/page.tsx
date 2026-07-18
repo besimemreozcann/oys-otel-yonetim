@@ -66,7 +66,7 @@ function statusMeta(reservation: ReservationForCalendar | undefined) {
   };
 }
 
-function modeHref(mod: "genis" | "gun", selectedHotelId: number, selectedFloorId: number | undefined, start: Date) {
+function modeHref(mod: "genis" | "gun" | "pano", selectedHotelId: number, selectedFloorId: number | undefined, start: Date) {
   const params = new URLSearchParams({ otelId: String(selectedHotelId), baslangic: isoDate(start), mod });
   if (selectedFloorId) params.set("katId", String(selectedFloorId));
   return `/doluluk?${params.toString()}`;
@@ -102,10 +102,10 @@ export default async function DolulukPage({ searchParams }: PageProps) {
     );
   }
 
-  const mode = params.mod === "gun" ? "gun" : "genis";
+  const mode = params.mod === "gun" || params.mod === "pano" ? params.mod : "genis";
   const start = dateOnly(params.baslangic ?? todayIstanbulDateString());
-  const days = Array.from({ length: mode === "gun" ? 1 : 30 }, (_, index) => addDays(start, index));
-  const end = addDays(start, mode === "gun" ? 1 : 30);
+  const days = Array.from({ length: mode === "genis" ? 30 : 1 }, (_, index) => addDays(start, index));
+  const end = addDays(start, mode === "genis" ? 30 : 1);
   const selectedFloorId = params.katId ? Number(params.katId) : undefined;
 
   const [floors, rooms, reservations] = await Promise.all([
@@ -162,6 +162,7 @@ export default async function DolulukPage({ searchParams }: PageProps) {
             <select className="h-9 rounded-md border border-border bg-white px-3 text-sm" name="mod" defaultValue={mode}>
               <option value="genis">Geniş görünüm</option>
               <option value="gun">Gün görünümü</option>
+              <option value="pano">Pano görünümü</option>
             </select>
             <button className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white" type="submit">
               Göster
@@ -182,6 +183,12 @@ export default async function DolulukPage({ searchParams }: PageProps) {
               href={modeHref("gun", selectedHotel.id, selectedFloorId, start)}
             >
               Gün görünümü
+            </Link>
+            <Link
+              className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft"
+              href={modeHref("pano", selectedHotel.id, selectedFloorId, start)}
+            >
+              Pano görünümü
             </Link>
           </div>
           <div className="flex items-center gap-3">
@@ -258,7 +265,7 @@ export default async function DolulukPage({ searchParams }: PageProps) {
               </table>
             </div>
           </section>
-        ) : (
+        ) : mode === "gun" ? (
           <section className="grid gap-4">
             <div className="flex items-center justify-between rounded-md border border-border bg-surface px-4 py-3">
               <Link className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accentSoft" href={modeHref("gun", selectedHotel.id, selectedFloorId, previousDay)}>
@@ -311,6 +318,97 @@ export default async function DolulukPage({ searchParams }: PageProps) {
                   </article>
                 );
               })}
+            </div>
+          </section>
+        ) : (
+          <section className="grid gap-4">
+            <div className="flex items-center justify-between rounded-md border border-border bg-surface px-4 py-3">
+              <Link className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accentSoft" href={modeHref("pano", selectedHotel.id, selectedFloorId, previousDay)}>
+                Önceki gün
+              </Link>
+              <div className="text-center">
+                <h2 className="text-xl font-semibold">Operasyon Panosu</h2>
+                <p className="text-sm text-muted">
+                  {dayKey(selectedDay)} · {selectedHotel.ad}
+                </p>
+              </div>
+              <Link className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accentSoft" href={modeHref("pano", selectedHotel.id, selectedFloorId, nextDay)}>
+                Sonraki gün
+              </Link>
+            </div>
+
+            <div className="min-h-[620px] overflow-auto rounded-md border border-border bg-white p-5 shadow-table">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">Günlük oda akışı</h3>
+                  <p className="text-sm text-muted">Kartlar resepsiyon panosu için büyük ve hızlı okunur tutuldu.</p>
+                </div>
+                <Link
+                  className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-white"
+                  href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&tarih=${isoDate(selectedDay)}`}
+                >
+                  Bu güne rezervasyon ekle
+                </Link>
+              </div>
+
+              <div className="grid auto-rows-[minmax(118px,auto)] grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                {rooms.map((room) => {
+                  const reservation = reservations.find((item) => item.odaId === room.id && overlaps(selectedDay, item));
+                  const meta = statusMeta(reservation);
+                  const accentClass = reservation
+                    ? reservation.durum === "GIRIS_YAPILDI"
+                      ? "border-l-red-500"
+                      : reservation.durum === "BEKLEMEDE"
+                        ? "border-l-cyan-500"
+                        : "border-l-violet-500"
+                    : "border-l-emerald-500";
+
+                  return (
+                    <article key={room.id} className={`rounded-md border border-border border-l-4 bg-surface p-4 shadow-sm ${accentClass}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-medium uppercase text-muted">{room.kat.ad}</div>
+                          <h3 className="mt-1 text-2xl font-semibold">Oda {room.odaNo}</h3>
+                          <p className="text-sm text-muted">
+                            {room.odaTipi ?? "Oda"} · {room.kapasite} kişi
+                          </p>
+                        </div>
+                        <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${meta.cellClass}`}>{meta.label}</span>
+                      </div>
+
+                      {reservation ? (
+                        <div className="mt-4 grid gap-2 text-sm">
+                          <div className="rounded-md bg-white px-3 py-2">
+                            <div className="text-xs text-muted">Cari</div>
+                            <div className="font-semibold">{reservation.cari.ad}</div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-md bg-white px-3 py-2">
+                              <div className="text-xs text-muted">Tarih</div>
+                              <div className="font-medium">
+                                {formatDateTR(reservation.girisTarihi)} - {formatDateTR(reservation.cikisTarihi)}
+                              </div>
+                            </div>
+                            <div className="rounded-md bg-white px-3 py-2">
+                              <div className="text-xs text-muted">Kişi</div>
+                              <div className="font-medium">{reservation.kisiSayisi}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-5">
+                          <Link
+                            className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-white"
+                            href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&odaId=${room.id}&tarih=${isoDate(selectedDay)}`}
+                          >
+                            Hızlı rezervasyon
+                          </Link>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           </section>
         )}
