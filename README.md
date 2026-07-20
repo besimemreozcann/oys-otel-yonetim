@@ -1,5 +1,3 @@
-rabbittest
-
 # OYS — Çoklu Otel Yönetim Sistemi
 
 Faz 1 teslimi: Next.js App Router, Prisma/PostgreSQL, kullanıcı girişi, otel bazlı yetki katmanı, kullanıcı yetki matrisi ve otel/kat/oda CRUD.
