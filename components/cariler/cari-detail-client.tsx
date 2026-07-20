@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
+  CARI_HAREKET_TUR_LABELS,
   CARI_TUR_LABELS,
   ILETISIM_TUR_LABELS,
+  ODEME_YONTEMI_LABELS,
   REZERVASYON_DURUM_LABELS,
   centsToDecimalString,
   decimalToCents,
@@ -35,6 +37,7 @@ type CariDetail = {
     tur: string;
     borc: string;
     alacak: string;
+    odemeYontemi: keyof typeof ODEME_YONTEMI_LABELS | null;
     aciklama: string | null;
     otel: { ad: string };
     rezervasyon: { kisiSayisi: number; oda: { odaNo: string } } | null;
@@ -124,6 +127,10 @@ export function CariDetailClient({ cari, selectedHotelId, canEdit }: CariDetailC
   }
 
   let runningBalanceCents = 0;
+  function movementLabel(item: CariDetail["hareketler"][number]) {
+    if (item.tur === "TAHSILAT" && item.odemeYontemi) return `Tahsilat (${ODEME_YONTEMI_LABELS[item.odemeYontemi]})`;
+    return CARI_HAREKET_TUR_LABELS[item.tur as keyof typeof CARI_HAREKET_TUR_LABELS] ?? item.tur;
+  }
 
   return (
     <div className="grid gap-6">
@@ -301,7 +308,10 @@ export function CariDetailClient({ cari, selectedHotelId, canEdit }: CariDetailC
                       {item.rezervasyon ? ` / ${item.rezervasyon.oda.odaNo}` : ""}
                     </td>
                     <td className="px-3 py-2">{item.rezervasyon?.kisiSayisi ?? "-"}</td>
-                    <td className="px-3 py-2">{item.aciklama ?? item.tur}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{movementLabel(item)}</div>
+                      {item.aciklama ? <div className="text-xs text-muted">{item.aciklama}</div> : null}
+                    </td>
                     <td className="px-3 py-2 text-right">{formatMoneyTR(item.borc)}</td>
                     <td className="px-3 py-2 text-right">{formatMoneyTR(item.alacak)}</td>
                     <td className="px-3 py-2 text-right font-medium">{formatMoneyTR(centsToDecimalString(runningBalanceCents))}</td>

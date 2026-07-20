@@ -1,4 +1,17 @@
-import { Building2, CalendarDays, Hotel, LayoutGrid, Users, WalletCards } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Building2,
+  CalendarDays,
+  ClipboardCheck,
+  CreditCard,
+  FileText,
+  Hotel,
+  LayoutGrid,
+  ReceiptText,
+  ScrollText,
+  Users,
+  WalletCards
+} from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
@@ -33,6 +46,18 @@ export async function AppShell({ children, selectedHotelId, hotelSelectorAction 
         permission.rezervasyonYetkisi === "EKLE" ||
         permission.rezervasyonYetkisi === "TAM"
     );
+  const canSeeFinans =
+    session.rol === "SUPER_ADMIN" ||
+    permissions.some((permission) => permission.finansYetkisi === "GORUNTULE" || permission.finansYetkisi === "SINIRLI" || permission.finansYetkisi === "TAM");
+  const canUseFinans =
+    session.rol === "SUPER_ADMIN" ||
+    permissions.some((permission) => permission.finansYetkisi === "SINIRLI" || permission.finansYetkisi === "TAM");
+  const canUseVirman =
+    session.rol === "SUPER_ADMIN" || permissions.some((permission) => permission.finansYetkisi === "TAM");
+  const canSeeRaporlar =
+    session.rol === "SUPER_ADMIN" ||
+    permissions.some((permission) => permission.raporYetkisi === "GORUNTULE" || permission.raporYetkisi === "TAM");
+  const canSeeOnayKuyrugu = session.rol === "SUPER_ADMIN" || session.rol === "ADMIN";
 
   const currentHotelId = selectedHotelId ?? visibleHotels[0]?.id;
 
@@ -79,11 +104,83 @@ export async function AppShell({ children, selectedHotelId, hotelSelectorAction 
               </Link>
             </>
           ) : null}
-          {session.rol === "SUPER_ADMIN" ? (
-            <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/users">
-              <Users className="h-4 w-4" />
-              Kullanıcı yönetimi
+          {canSeeFinans ? (
+            <div className="pt-1">
+              <div className="flex items-center gap-2 rounded-md px-3 py-2 text-white/80">
+                <CreditCard className="h-4 w-4" />
+                Finans
+              </div>
+              <div className="ml-6 grid gap-1 border-l border-white/10 pl-2">
+                <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/finans/hesaplar">
+                  <WalletCards className="h-4 w-4" />
+                  Hesaplar
+                </Link>
+                {canUseFinans ? (
+                  <>
+                    <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/finans/tahsilat">
+                      <ReceiptText className="h-4 w-4" />
+                      Tahsilat
+                    </Link>
+                    <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/finans/gider">
+                      <ReceiptText className="h-4 w-4" />
+                      Gider
+                    </Link>
+                  </>
+                ) : null}
+                {canUseVirman ? (
+                  <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/finans/virman">
+                    <ArrowLeftRight className="h-4 w-4" />
+                    Virman
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {canSeeRaporlar ? (
+            <div className="pt-1">
+              <div className="flex items-center gap-2 rounded-md px-3 py-2 text-white/80">
+                <FileText className="h-4 w-4" />
+                Raporlar
+              </div>
+              <div className="ml-6 grid gap-1 border-l border-white/10 pl-2">
+                <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/raporlar/doluluk">
+                  <LayoutGrid className="h-4 w-4" />
+                  Doluluk
+                </Link>
+                <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/raporlar/cari-ekstre">
+                  <WalletCards className="h-4 w-4" />
+                  Cari Ekstre
+                </Link>
+                <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/raporlar/gelir-gider">
+                  <ReceiptText className="h-4 w-4" />
+                  Gelir-Gider
+                </Link>
+                {session.rol === "SUPER_ADMIN" ? (
+                  <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/raporlar/denetim">
+                    <ScrollText className="h-4 w-4" />
+                    Denetim
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {canSeeOnayKuyrugu ? (
+            <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/onay-kuyrugu">
+              <ClipboardCheck className="h-4 w-4" />
+              Onay Kuyruğu
             </Link>
+          ) : null}
+          {session.rol === "SUPER_ADMIN" ? (
+            <>
+              <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/loglar">
+                <ScrollText className="h-4 w-4" />
+                İşlem Logları
+              </Link>
+              <Link className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-sidebarMuted" href="/users">
+                <Users className="h-4 w-4" />
+                Kullanıcı yönetimi
+              </Link>
+            </>
           ) : null}
         </nav>
       </aside>

@@ -43,7 +43,7 @@ export default async function YeniRezervasyonPage({ searchParams }: PageProps) {
   const cikisDate = dateOnly(giris);
   cikisDate.setUTCDate(cikisDate.getUTCDate() + 1);
 
-  const [rooms, cariler] = await Promise.all([
+  const [rooms, cariler, hesaplar] = await Promise.all([
     prisma.oda.findMany({
       where: { otelId: selectedHotel.id, silindiMi: false, aktifMi: true },
       include: {
@@ -64,6 +64,10 @@ export default async function YeniRezervasyonPage({ searchParams }: PageProps) {
       where: { silindiMi: false, aktifMi: true },
       include: { hareketler: { where: { silindiMi: false }, select: { borc: true, alacak: true } } },
       orderBy: { ad: "asc" }
+    }),
+    prisma.hesap.findMany({
+      where: { otelId: selectedHotel.id, silindiMi: false, aktifMi: true },
+      orderBy: [{ tur: "asc" }, { ad: "asc" }]
     })
   ]);
 
@@ -73,7 +77,16 @@ export default async function YeniRezervasyonPage({ searchParams }: PageProps) {
         cariler={cariler.map((cari) => ({
           id: cari.id,
           ad: cari.ad,
+          tur: cari.tur,
+          telefon: cari.telefon,
+          whatsapp: cari.whatsapp,
+          eposta: cari.eposta,
           bakiye: centsToDecimalString(calculateBalanceCents(cari.hareketler))
+        }))}
+        hesaplar={hesaplar.map((hesap) => ({
+          id: hesap.id,
+          ad: hesap.ad,
+          tur: hesap.tur
         }))}
         hotels={visibleHotels.map((hotel) => ({ id: hotel.id, ad: hotel.ad }))}
         initialDate={giris}

@@ -17,7 +17,7 @@ type ReservationForCalendar = {
   durum: "BEKLEMEDE" | "ONAYLANDI" | "GIRIS_YAPILDI" | "CIKIS_YAPILDI" | "IPTAL";
   kisiSayisi: number;
   toplamTutar: { toString(): string };
-  cari: { ad: string };
+  cari: { ad: string; telefon: string | null; whatsapp: string | null };
 };
 
 function addDays(value: Date, days: number) {
@@ -124,13 +124,21 @@ export default async function DolulukPage({ searchParams }: PageProps) {
         cikisTarihi: { gt: start },
         ...(selectedFloorId ? { oda: { katId: selectedFloorId } } : {})
       },
-      include: { cari: { select: { ad: true } } }
+      include: { cari: { select: { ad: true, telefon: true, whatsapp: true } } }
     })
   ]);
 
   const selectedDay = days[0];
   const previousDay = addDays(start, -1);
   const nextDay = addDays(start, 1);
+  const roomPlans = rooms.map((room) => {
+    const reservation = reservations.find((item) => item.odaId === room.id && overlaps(selectedDay, item));
+    return { room, reservation, meta: statusMeta(reservation) };
+  });
+  const emptyRooms = roomPlans.filter((item) => !item.reservation);
+  const checkedInRooms = roomPlans.filter((item) => item.reservation?.durum === "GIRIS_YAPILDI");
+  const reservedRooms = roomPlans.filter((item) => item.reservation && item.reservation.durum !== "GIRIS_YAPILDI");
+  const checkoutRooms = roomPlans.filter((item) => item.reservation && isoDate(item.reservation.cikisTarihi) === isoDate(selectedDay));
 
   return (
     <AppShell selectedHotelId={selectedHotel.id} hotelSelectorAction="/doluluk">
@@ -138,9 +146,7 @@ export default async function DolulukPage({ searchParams }: PageProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Doluluk Takvimi</h1>
-            <p className="mt-1 text-sm text-muted">
-              Geniş görünüm 30 günlük planı, gün görünümü seçili günün oda durumlarını gösterir.
-            </p>
+            <p className="mt-1 text-sm text-muted">Geniş plan, gün listesi ve resepsiyon panosu.</p>
           </div>
           <form action="/doluluk" className="flex flex-wrap items-center justify-end gap-2">
             <select className="h-9 rounded-md border border-border bg-white px-3 text-sm" name="otelId" defaultValue={selectedHotel.id}>
@@ -171,23 +177,14 @@ export default async function DolulukPage({ searchParams }: PageProps) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3 text-sm">
-          <div className="flex items-center gap-2">
-            <Link
-              className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft"
-              href={modeHref("genis", selectedHotel.id, selectedFloorId, start)}
-            >
+          <div className="flex flex-wrap items-center gap-2">
+            <Link className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft" href={modeHref("genis", selectedHotel.id, selectedFloorId, start)}>
               Geniş görünüm
             </Link>
-            <Link
-              className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft"
-              href={modeHref("gun", selectedHotel.id, selectedFloorId, start)}
-            >
+            <Link className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft" href={modeHref("gun", selectedHotel.id, selectedFloorId, start)}>
               Gün görünümü
             </Link>
-            <Link
-              className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft"
-              href={modeHref("pano", selectedHotel.id, selectedFloorId, start)}
-            >
+            <Link className="rounded-md border border-border px-3 py-2 hover:bg-accentSoft" href={modeHref("pano", selectedHotel.id, selectedFloorId, start)}>
               Pano görünümü
             </Link>
           </div>
@@ -337,78 +334,79 @@ export default async function DolulukPage({ searchParams }: PageProps) {
               </Link>
             </div>
 
-            <div className="min-h-[620px] overflow-auto rounded-md border border-border bg-white p-5 shadow-table">
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold">Günlük oda akışı</h3>
-                  <p className="text-sm text-muted">Kartlar resepsiyon panosu için büyük ve hızlı okunur tutuldu.</p>
-                </div>
-                <Link
-                  className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-white"
-                  href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&tarih=${isoDate(selectedDay)}`}
-                >
-                  Bu güne rezervasyon ekle
-                </Link>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-md border border-border bg-white px-4 py-3">
+                <div className="text-sm text-muted">Toplam oda</div>
+                <div className="mt-1 text-2xl font-semibold">{rooms.length}</div>
               </div>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+                <div className="text-sm">Boş</div>
+                <div className="mt-1 text-2xl font-semibold">{emptyRooms.length}</div>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+                <div className="text-sm">Rezerve/Bekleyen</div>
+                <div className="mt-1 text-2xl font-semibold">{reservedRooms.length}</div>
+              </div>
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+                <div className="text-sm">İçeride</div>
+                <div className="mt-1 text-2xl font-semibold">{checkedInRooms.length}</div>
+              </div>
+            </div>
 
-              <div className="grid auto-rows-[minmax(118px,auto)] grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-                {rooms.map((room) => {
-                  const reservation = reservations.find((item) => item.odaId === room.id && overlaps(selectedDay, item));
-                  const meta = statusMeta(reservation);
-                  const accentClass = reservation
-                    ? reservation.durum === "GIRIS_YAPILDI"
-                      ? "border-l-red-500"
-                      : reservation.durum === "BEKLEMEDE"
-                        ? "border-l-cyan-500"
-                        : "border-l-violet-500"
-                    : "border-l-emerald-500";
-
-                  return (
-                    <article key={room.id} className={`rounded-md border border-border border-l-4 bg-surface p-4 shadow-sm ${accentClass}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-medium uppercase text-muted">{room.kat.ad}</div>
-                          <h3 className="mt-1 text-2xl font-semibold">Oda {room.odaNo}</h3>
-                          <p className="text-sm text-muted">
-                            {room.odaTipi ?? "Oda"} · {room.kapasite} kişi
-                          </p>
-                        </div>
-                        <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${meta.cellClass}`}>{meta.label}</span>
-                      </div>
-
-                      {reservation ? (
-                        <div className="mt-4 grid gap-2 text-sm">
-                          <div className="rounded-md bg-white px-3 py-2">
-                            <div className="text-xs text-muted">Cari</div>
-                            <div className="font-semibold">{reservation.cari.ad}</div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-md bg-white px-3 py-2">
-                              <div className="text-xs text-muted">Tarih</div>
-                              <div className="font-medium">
-                                {formatDateTR(reservation.girisTarihi)} - {formatDateTR(reservation.cikisTarihi)}
+            <div className="grid gap-4 xl:grid-cols-4">
+              {[
+                { title: "Bugün Çıkış", items: checkoutRooms, tone: "border-sky-200 bg-sky-50" },
+                { title: "İçeride", items: checkedInRooms, tone: "border-red-200 bg-red-50" },
+                { title: "Bekleyen / Rezerve", items: reservedRooms, tone: "border-amber-200 bg-amber-50" },
+                { title: "Boş Odalar", items: emptyRooms, tone: "border-emerald-200 bg-emerald-50" }
+              ].map((column) => (
+                <div key={column.title} className={`min-h-[520px] rounded-md border ${column.tone} p-3`}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h3 className="font-semibold">{column.title}</h3>
+                    <span className="rounded-md bg-white/80 px-2 py-1 text-xs font-semibold">{column.items.length}</span>
+                  </div>
+                  <div className="grid gap-3">
+                    {column.items.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border bg-white/70 px-3 py-6 text-center text-sm text-muted">Kayıt yok</div>
+                    ) : (
+                      column.items.map(({ room, reservation, meta }) => (
+                        <article key={`${column.title}-${room.id}`} className="rounded-md border border-border bg-white p-3 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-xs font-medium uppercase text-muted">{room.kat.ad}</div>
+                              <h4 className="mt-1 text-lg font-semibold">Oda {room.odaNo}</h4>
+                              <div className="text-xs text-muted">
+                                {room.odaTipi ?? "Oda"} · {room.kapasite} kişi
                               </div>
                             </div>
-                            <div className="rounded-md bg-white px-3 py-2">
-                              <div className="text-xs text-muted">Kişi</div>
-                              <div className="font-medium">{reservation.kisiSayisi}</div>
-                            </div>
+                            <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${meta.cellClass}`}>{meta.label}</span>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="mt-5">
-                          <Link
-                            className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-white"
-                            href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&odaId=${room.id}&tarih=${isoDate(selectedDay)}`}
-                          >
-                            Hızlı rezervasyon
-                          </Link>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
+
+                          {reservation ? (
+                            <div className="mt-3 grid gap-1 text-sm">
+                              <div className="font-medium">{reservation.cari.ad}</div>
+                              <div className="text-muted">
+                                {formatDateTR(reservation.girisTarihi)} - {formatDateTR(reservation.cikisTarihi)}
+                              </div>
+                              <div className="text-muted">{reservation.kisiSayisi} kişi</div>
+                              <div className="truncate text-xs text-muted">
+                                {reservation.cari.whatsapp || reservation.cari.telefon || "İletişim yok"}
+                              </div>
+                            </div>
+                          ) : (
+                            <Link
+                              className="mt-3 inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-white"
+                              href={`/rezervasyonlar/yeni?otelId=${selectedHotel.id}&odaId=${room.id}&tarih=${isoDate(selectedDay)}`}
+                            >
+                              Hızlı rezervasyon
+                            </Link>
+                          )}
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         )}

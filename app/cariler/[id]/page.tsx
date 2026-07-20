@@ -108,6 +108,7 @@ export default async function CariDetailPage({ params, searchParams }: PageProps
             tur: item.tur,
             borc: decimalString(item.borc),
             alacak: decimalString(item.alacak),
+            odemeYontemi: item.odemeYontemi,
             aciklama: item.aciklama,
             otel: item.otel,
             rezervasyon: item.rezervasyon

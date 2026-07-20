@@ -24,6 +24,20 @@ export const REZERVASYON_DURUM_LABELS = {
   IPTAL: "İptal"
 } as const;
 
+export const ODEME_YONTEMI_LABELS = {
+  NAKIT: "Nakit",
+  HAVALE: "Havale",
+  EFT: "EFT",
+  KART: "Kart"
+} as const;
+
+export const CARI_HAREKET_TUR_LABELS = {
+  KONAKLAMA_BORC: "Konaklama",
+  TAHSILAT: "Tahsilat",
+  ODEME: "Ödeme",
+  DUZELTME: "Düzeltme"
+} as const;
+
 export function dateOnly(value: string | Date) {
   const date = typeof value === "string" ? new Date(`${value}T00:00:00.000Z`) : value;
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
