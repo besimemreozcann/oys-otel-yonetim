@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { Prisma, type YetkiSeviyesiCari } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { readSession } from "@/lib/session";
-import { hasHotelPermission, type PermissionDomain } from "@/lib/authz";
+import { hasAnyCariPermission, hasHotelPermission, type PermissionDomain } from "@/lib/authz";
 import { hasHotelAccess } from "@/lib/kroki";
 
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ message }, { status });
+}
+
+export async function parseJsonBody<T = unknown>(request: Request): Promise<{ data: T | null; error: Response | null }> {
+  try {
+    return { data: (await request.json()) as T, error: null };
+  } catch {
+    return { data: null, error: jsonError("Geçersiz istek gövdesi.", 400) };
+  }
 }
 
 export function intParam(value: string | null, name: string) {
@@ -56,6 +64,22 @@ export async function requireApiHotelPermission(
     where: { kullaniciId: session.id }
   });
   const decision = hasHotelPermission(session, permissions, otelId, domain, required);
+
+  if (!decision.allowed) {
+    return { error: jsonError(decision.message, decision.status), session: null };
+  }
+
+  return { error: null, session };
+}
+
+export async function requireApiAnyCariPermission(required: YetkiSeviyesiCari) {
+  const { error, session } = await requireApiSession();
+  if (error || !session) return { error, session: null };
+
+  const permissions = await prisma.kullaniciOtelYetkisi.findMany({
+    where: { kullaniciId: session.id }
+  });
+  const decision = hasAnyCariPermission(session, permissions, required);
 
   if (!decision.allowed) {
     return { error: jsonError(decision.message, decision.status), session: null };

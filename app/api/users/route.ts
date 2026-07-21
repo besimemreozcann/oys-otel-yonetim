@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { jsonError, prismaErrorResponse, requireApiSession } from "@/lib/api";
+import { jsonError, parseJsonBody, prismaErrorResponse, requireApiSession } from "@/lib/api";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
@@ -35,7 +35,10 @@ export async function POST(request: Request) {
   const { error, session } = await requireApiSession();
   if (error || !session) return error;
   if (session.rol !== "SUPER_ADMIN") return jsonError("Kullanıcı eklemek için SUPER_ADMIN yetkisi gerekir.", 403);
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Kullanıcı bilgilerini kontrol edin.", 400);
 
   try {

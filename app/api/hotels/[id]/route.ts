@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission, requireApiSession } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, prismaErrorResponse, requireApiHotelPermission, requireApiSession } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -20,7 +20,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const id = intParam(rawId, "Otel");
   const permission = await requireApiHotelPermission(id, "otel", "GORUNTULE");
   if (permission.error) return permission.error;
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Otel bilgilerini kontrol edin.", 400);
 
   try {

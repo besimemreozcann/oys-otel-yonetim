@@ -1,19 +1,27 @@
 import { z } from "zod";
 import { jsonError, requireApiHotelPermission, requireApiSession } from "@/lib/api";
 import { formatDateTR, formatMoneyTR } from "@/lib/faz3";
-import type { ReportType } from "@/lib/reports";
+import { validateReportDateRange, type ReportType } from "@/lib/reports";
+import { sanitizeExcelCell } from "@/lib/validation";
 
-export const reportRequestSchema = z.object({
-  raporTuru: z.enum(["doluluk", "cari-ekstre", "gelir-gider", "denetim"]),
-  otelId: z.coerce.number().int().positive().optional(),
-  katId: z.coerce.number().int().positive().optional(),
-  cariId: z.coerce.number().int().positive().optional(),
-  hesapId: z.coerce.number().int().positive().optional(),
-  kullaniciId: z.coerce.number().int().positive().optional(),
-  islemTuru: z.string().trim().optional(),
-  baslangic: z.string().min(1),
-  bitis: z.string().min(1)
-});
+export const reportRequestSchema = z
+  .object({
+    raporTuru: z.enum(["doluluk", "cari-ekstre", "gelir-gider", "denetim"]),
+    otelId: z.coerce.number().int().positive().optional(),
+    katId: z.coerce.number().int().positive().optional(),
+    cariId: z.coerce.number().int().positive().optional(),
+    hesapId: z.coerce.number().int().positive().optional(),
+    kullaniciId: z.coerce.number().int().positive().optional(),
+    islemTuru: z.string().trim().optional(),
+    baslangic: z.string().min(1),
+    bitis: z.string().min(1)
+  })
+  .superRefine((data, ctx) => {
+    const message = validateReportDateRange(data.baslangic, data.bitis);
+    if (message) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: ["bitis"] });
+    }
+  });
 
 export type ReportRequest = z.infer<typeof reportRequestSchema>;
 
@@ -60,6 +68,10 @@ type TableData = {
   rows: Array<Array<string | number>>;
   summary?: string[];
 };
+
+export function sanitizeExcelRow(row: Array<string | number>) {
+  return row.map((value) => sanitizeExcelCell(value));
+}
 
 export function reportToTable(type: ReportType, payload: any): TableData {
   if (type === "doluluk") {

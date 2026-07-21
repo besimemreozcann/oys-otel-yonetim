@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, requireApiHotelAccess } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, requireApiHotelAccess } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -14,7 +14,10 @@ type RouteContext = {
 export async function PATCH(request: Request, { params }: RouteContext) {
   const { roomId: rawRoomId } = await params;
   const roomId = intParam(rawRoomId, "Oda");
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Oda durumu geçerli değil.", 400);
 
   const room = await prisma.oda.findFirst({

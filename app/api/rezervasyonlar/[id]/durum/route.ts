@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, requireApiHotelPermission } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -19,7 +19,10 @@ const transition = {
 } as const;
 
 export async function PATCH(request: Request, { params }: RouteContext) {
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Rezervasyon durum işlemi geçerli değil.", 400);
 
   const { id: rawId } = await params;

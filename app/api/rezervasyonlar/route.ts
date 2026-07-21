@@ -9,8 +9,9 @@ import {
   nightCount
 } from "@/lib/faz3";
 import { isValidAccountForPaymentMethod } from "@/lib/finance";
-import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { validateTutarCents } from "@/lib/validation";
 
 const createSchema = z.object({
   otelId: z.number().int().positive(),
@@ -85,7 +86,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const parsed = createSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = createSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Rezervasyon bilgilerini kontrol edin.", 400);
 
   const data = parsed.data;
@@ -121,11 +125,17 @@ export async function POST(request: Request) {
       : decimalToCents(data.toplamTutar);
   const tahsilatCents = decimalToCents(data.tahsilatTutar);
 
-  if (toplamCents <= 0) return jsonError("Toplam tutar sıfırdan büyük olmalıdır.", 400);
-  if (data.ucretTipi === "KISI_BASI" && birimCents <= 0) {
-    return jsonError("Kişi başı ücret sıfırdan büyük olmalıdır.", 400);
+  const toplamError = validateTutarCents(toplamCents, "Toplam tutar");
+  if (toplamError) return jsonError(toplamError, 400);
+  if (data.ucretTipi === "KISI_BASI") {
+    const birimError = validateTutarCents(birimCents, "Kişi başı ücret");
+    if (birimError) return jsonError(birimError, 400);
   }
   if (tahsilatCents < 0) return jsonError("Tahsilat tutarı negatif olamaz.", 400);
+  if (tahsilatCents > 0) {
+    const tahsilatError = validateTutarCents(tahsilatCents, "Tahsilat tutarı");
+    if (tahsilatError) return jsonError(tahsilatError, 400);
+  }
   if (tahsilatCents > toplamCents) return jsonError("Alınan ödeme toplam tutardan büyük olamaz.", 400);
 
   let hesap: { id: number; ad: string; tur: "NAKIT_KASA" | "BANKA" } | null = null;

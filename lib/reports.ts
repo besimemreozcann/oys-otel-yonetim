@@ -4,6 +4,7 @@ import { HESAP_HAREKET_TURU_LABELS, calculateAccountBalanceCents, hesapHareketYo
 import { prisma } from "@/lib/prisma";
 
 export type ReportType = "doluluk" | "cari-ekstre" | "gelir-gider" | "denetim";
+export const MAX_REPORT_RANGE_DAYS = 366;
 
 export function addDays(value: Date, days: number) {
   const next = new Date(value);
@@ -21,6 +22,22 @@ export function defaultStart(daysBack: number) {
 
 export function defaultEnd() {
   return isoDate(dateOnly(new Date()));
+}
+
+export function validateReportDateRange(baslangic: string, bitis: string) {
+  const start = dateOnly(baslangic);
+  const end = dateOnly(bitis);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "Rapor tarihlerini kontrol edin.";
+  }
+  if (end < start) {
+    return "Bitiş tarihi başlangıç tarihinden önce olamaz.";
+  }
+  const rangeDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  if (rangeDays > MAX_REPORT_RANGE_DAYS) {
+    return "Rapor tarih aralığı en fazla 1 yıl olabilir. Lütfen aralığı daraltın.";
+  }
+  return null;
 }
 
 export function enumerateDays(startText: string, endText: string) {

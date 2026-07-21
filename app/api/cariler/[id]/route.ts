@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { calculateBalanceCents, centsToDecimalString } from "@/lib/faz3";
-import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, prismaErrorResponse, requireApiAnyCariPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const cariSchema = z.object({
@@ -25,20 +25,22 @@ function cariIdFrom(raw: string) {
   return intParam(raw, "Cari");
 }
 
-export async function GET(request: Request, { params }: RouteContext) {
-  const { searchParams } = new URL(request.url);
-  let otelId: number;
+function parseCariId(raw: string) {
   try {
-    otelId = intParam(searchParams.get("otelId"), "Otel");
+    return { id: cariIdFrom(raw), error: null };
   } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Otel geçerli değil.", 400);
+    return { id: null, error: jsonError(error instanceof Error ? error.message : "Cari geçerli değil.", 400) };
   }
+}
 
-  const permission = await requireApiHotelPermission(otelId, "cari", "GORUNTULE");
+export async function GET(request: Request, { params }: RouteContext) {
+  const permission = await requireApiAnyCariPermission("GORUNTULE");
   if (permission.error) return permission.error;
 
   const { id: rawId } = await params;
-  const id = cariIdFrom(rawId);
+  const parsedId = parseCariId(rawId);
+  if (parsedId.error) return parsedId.error;
+  const id = parsedId.id;
   const cari = await prisma.cari.findFirst({
     where: { id, silindiMi: false },
     include: {
@@ -70,14 +72,19 @@ export async function GET(request: Request, { params }: RouteContext) {
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
-  const parsed = cariSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = cariSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Cari bilgilerini kontrol edin.", 400);
 
-  const permission = await requireApiHotelPermission(parsed.data.otelId, "cari", "TAM");
+  const permission = await requireApiAnyCariPermission("TAM");
   if (permission.error) return permission.error;
 
   const { id: rawId } = await params;
-  const id = cariIdFrom(rawId);
+  const parsedId = parseCariId(rawId);
+  if (parsedId.error) return parsedId.error;
+  const id = parsedId.id;
 
   try {
     const cari = await prisma.cari.update({
@@ -101,19 +108,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 }
 
 export async function DELETE(request: Request, { params }: RouteContext) {
-  const { searchParams } = new URL(request.url);
-  let otelId: number;
-  try {
-    otelId = intParam(searchParams.get("otelId"), "Otel");
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Otel geçerli değil.", 400);
-  }
-
-  const permission = await requireApiHotelPermission(otelId, "cari", "TAM");
+  const permission = await requireApiAnyCariPermission("TAM");
   if (permission.error) return permission.error;
 
   const { id: rawId } = await params;
-  const id = cariIdFrom(rawId);
+  const parsedId = parseCariId(rawId);
+  if (parsedId.error) return parsedId.error;
+  const id = parsedId.id;
 
   const [openReservationCount, movements] = await Promise.all([
     prisma.rezervasyon.count({

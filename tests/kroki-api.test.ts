@@ -26,6 +26,7 @@ vi.mock("@/lib/api", () => ({
     return parsed;
   },
   jsonError: (message: string, status = 400) => Response.json({ message }, { status }),
+  parseJsonBody: async (request: Request) => ({ data: await request.json(), error: null }),
   requireApiHotelAccess: apiMocks.requireApiHotelAccess
 }));
 

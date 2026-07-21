@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, requireApiHotelAccess } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, requireApiHotelAccess } from "@/lib/api";
 import { clampRoomPosition } from "@/lib/kroki";
 import { prisma } from "@/lib/prisma";
 
@@ -18,7 +18,10 @@ type RouteContext = {
 export async function PATCH(request: Request, { params }: RouteContext) {
   const { roomId: rawRoomId } = await params;
   const roomId = intParam(rawRoomId, "Oda");
-  const parsed = positionSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = positionSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Oda konumu geçerli değil.", 400);
 
   const room = await prisma.oda.findFirst({

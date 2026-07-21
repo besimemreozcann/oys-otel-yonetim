@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { calculateBalanceCents, centsToDecimalString } from "@/lib/faz3";
-import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
+import { jsonError, parseJsonBody, prismaErrorResponse, requireApiAnyCariPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const cariSchema = z.object({
@@ -19,14 +19,7 @@ const cariSchema = z.object({
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  let otelId: number;
-  try {
-    otelId = intParam(searchParams.get("otelId"), "Otel");
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Otel geçerli değil.", 400);
-  }
-
-  const permission = await requireApiHotelPermission(otelId, "cari", "GORUNTULE");
+  const permission = await requireApiAnyCariPermission("GORUNTULE");
   if (permission.error) return permission.error;
 
   const tur = searchParams.get("tur");
@@ -62,10 +55,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const parsed = cariSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = cariSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Cari bilgilerini kontrol edin.", 400);
 
-  const permission = await requireApiHotelPermission(parsed.data.otelId, "cari", "TAM");
+  const permission = await requireApiAnyCariPermission("TAM");
   if (permission.error) return permission.error;
 
   try {

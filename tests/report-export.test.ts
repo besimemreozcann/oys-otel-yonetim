@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reportRequestSchema, reportToTable } from "../lib/report-export";
+import { reportRequestSchema, reportToTable, sanitizeExcelRow } from "../lib/report-export";
 
 describe("Faz 5 rapor export yardimcilari", () => {
   it("rapor filtrelerini sayisal alanlara donusturur", () => {
@@ -37,5 +37,44 @@ describe("Faz 5 rapor export yardimcilari", () => {
     expect(table.headers).toContain("Bakiye");
     expect(table.rows[0][3]).toBe("Tahsilat");
     expect(table.summary?.join(" ")).toContain("Toplam Alacak");
+  });
+
+  it("ters rapor tarih araligini reddeder", () => {
+    const parsed = reportRequestSchema.safeParse({
+      raporTuru: "gelir-gider",
+      otelId: "1",
+      baslangic: "2026-07-20",
+      bitis: "2026-07-01"
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toBe("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+    }
+  });
+
+  it("bir yildan uzun rapor tarih araligini reddeder", () => {
+    const parsed = reportRequestSchema.safeParse({
+      raporTuru: "gelir-gider",
+      otelId: "1",
+      baslangic: "2025-01-01",
+      bitis: "2026-01-02"
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain("en fazla 1 yıl");
+    }
+  });
+
+  it("excel formul olarak yorumlanabilecek metinleri guvenli hale getirir", () => {
+    expect(sanitizeExcelRow(["=1+1", "+90", "-komut", "@alan", "normal", 12])).toEqual([
+      "'=1+1",
+      "'+90",
+      "'-komut",
+      "'@alan",
+      "normal",
+      12
+    ]);
   });
 });

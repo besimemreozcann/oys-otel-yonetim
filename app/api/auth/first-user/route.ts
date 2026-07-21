@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { createSessionToken, SESSION_COOKIE } from "@/lib/session";
-import { jsonError, prismaErrorResponse } from "@/lib/api";
+import { jsonError, parseJsonBody, prismaErrorResponse } from "@/lib/api";
 
 const schema = z.object({
   adSoyad: z.string().min(2),
@@ -16,7 +16,10 @@ const schema = z.object({
 class RegistrationClosedError extends Error {}
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Bilgileri kontrol edip tekrar deneyin.", 400);
 
   let user;

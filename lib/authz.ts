@@ -123,3 +123,24 @@ export function visibleHotelIds(user: AuthzUser, permissions: PermissionRow[], a
   if (user.rol === "SUPER_ADMIN") return allHotelIds;
   return permissions.map((permission) => permission.otelId);
 }
+
+export function hasAnyCariPermission(
+  user: AuthzUser,
+  permissions: PermissionRow[],
+  required: YetkiSeviyesiCari
+): Decision {
+  if (user.rol === "SUPER_ADMIN") {
+    return { allowed: true, status: 200, message: "Erişim onaylandı." };
+  }
+
+  const allowed = permissions.some((permission) => cariRank[permission.cariYetkisi] >= cariRank[required]);
+  if (allowed) {
+    return { allowed: true, status: 200, message: "Erişim onaylandı." };
+  }
+
+  return {
+    allowed: false,
+    status: 403,
+    message: "Bu işlem için cari yetkiniz yok."
+  };
+}

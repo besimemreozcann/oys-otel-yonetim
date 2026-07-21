@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
+import { jsonError, parseJsonBody, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -10,7 +10,10 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Kat bilgilerini kontrol edin.", 400);
   const permission = await requireApiHotelPermission(parsed.data.otelId, "otel", "GORUNTULE");
   if (permission.error) return permission.error;

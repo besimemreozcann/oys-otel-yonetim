@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasHotelPermission } from "../lib/authz";
+import { hasAnyCariPermission, hasHotelPermission } from "../lib/authz";
 
 const personel = { id: 10, rol: "PERSONEL" as const };
 const superAdmin = { id: 1, rol: "SUPER_ADMIN" as const };
@@ -53,5 +53,49 @@ describe("yetki katmanı", () => {
 
     expect(decision.allowed).toBe(true);
     expect(decision.status).toBe(200);
+  });
+
+  it("cari ortak havuz yazma yetkisini herhangi bir oteldeki TAM cari yetkisinden verir", () => {
+    const decision = hasAnyCariPermission(
+      personel,
+      [
+        {
+          otelId: 1,
+          rezervasyonYetkisi: "YOK",
+          cariYetkisi: "GORUNTULE",
+          finansYetkisi: "YOK",
+          raporYetkisi: "YOK"
+        },
+        {
+          otelId: 2,
+          rezervasyonYetkisi: "YOK",
+          cariYetkisi: "TAM",
+          finansYetkisi: "YOK",
+          raporYetkisi: "YOK"
+        }
+      ],
+      "TAM"
+    );
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("cari yetkisi olmayan kullanıcının global cari yazmasını engeller", () => {
+    const decision = hasAnyCariPermission(
+      personel,
+      [
+        {
+          otelId: 1,
+          rezervasyonYetkisi: "YOK",
+          cariYetkisi: "GORUNTULE",
+          finansYetkisi: "YOK",
+          raporYetkisi: "YOK"
+        }
+      ],
+      "TAM"
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.status).toBe(403);
   });
 });

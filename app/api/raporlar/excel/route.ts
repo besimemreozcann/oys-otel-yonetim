@@ -1,11 +1,14 @@
 import ExcelJS from "exceljs";
-import { jsonError } from "@/lib/api";
+import { jsonError, parseJsonBody } from "@/lib/api";
 import { getReportPayload } from "@/lib/reports";
-import { reportFileName, reportRequestSchema, reportSheetName, reportToTable, requireReportExportPermission } from "@/lib/report-export";
+import { reportFileName, reportRequestSchema, reportSheetName, reportToTable, requireReportExportPermission, sanitizeExcelRow } from "@/lib/report-export";
 
 export async function POST(request: Request) {
-  const parsed = reportRequestSchema.safeParse(await request.json());
-  if (!parsed.success) return jsonError("Rapor filtrelerini kontrol edin.", 400);
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = reportRequestSchema.safeParse(body.data);
+  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Rapor filtrelerini kontrol edin.", 400);
 
   const permissionError = await requireReportExportPermission(parsed.data);
   if (permissionError) return permissionError;
@@ -15,13 +18,13 @@ export async function POST(request: Request) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "OYS";
   const worksheet = workbook.addWorksheet(reportSheetName(parsed.data.raporTuru));
-  worksheet.addRow([table.title]);
+  worksheet.addRow(sanitizeExcelRow([table.title]));
   worksheet.addRow([]);
-  worksheet.addRow(table.headers);
-  for (const row of table.rows) worksheet.addRow(row);
+  worksheet.addRow(sanitizeExcelRow(table.headers));
+  for (const row of table.rows) worksheet.addRow(sanitizeExcelRow(row));
   if (table.summary?.length) {
     worksheet.addRow([]);
-    worksheet.addRow(table.summary);
+    worksheet.addRow(sanitizeExcelRow(table.summary));
   }
   worksheet.getRow(1).font = { bold: true, size: 14 };
   worksheet.getRow(3).font = { bold: true };

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, prismaErrorResponse, requireApiAnyCariPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -17,10 +17,13 @@ type RouteContext = {
 };
 
 export async function PATCH(request: Request, { params }: RouteContext) {
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Yetkili bilgilerini kontrol edin.", 400);
 
-  const permission = await requireApiHotelPermission(parsed.data.otelId, "cari", "TAM");
+  const permission = await requireApiAnyCariPermission("TAM");
   if (permission.error) return permission.error;
 
   const { id: rawCariId, yetkiliId: rawYetkiliId } = await params;
@@ -46,15 +49,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 }
 
 export async function DELETE(request: Request, { params }: RouteContext) {
-  const { searchParams } = new URL(request.url);
-  let otelId: number;
-  try {
-    otelId = intParam(searchParams.get("otelId"), "Otel");
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Otel geçerli değil.", 400);
-  }
-
-  const permission = await requireApiHotelPermission(otelId, "cari", "TAM");
+  const permission = await requireApiAnyCariPermission("TAM");
   if (permission.error) return permission.error;
 
   const { yetkiliId: rawYetkiliId } = await params;

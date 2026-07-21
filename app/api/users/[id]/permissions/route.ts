@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { intParam, jsonError, prismaErrorResponse, requireApiSession } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, prismaErrorResponse, requireApiSession } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const permissionSchema = z.object({
@@ -26,7 +26,10 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
   const { id: rawId } = await params;
   const kullaniciId = intParam(rawId, "Kullanıcı");
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Yetki matrisi geçerli değil.", 400);
 
   const requestedHotelIds = [...new Set(parsed.data.permissions.map((permission) => permission.otelId))];

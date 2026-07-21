@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { centsToDecimalString, dateOnly, decimalToCents } from "@/lib/faz3";
 import { isValidAccountForPaymentMethod } from "@/lib/finance";
-import { intParam, jsonError, requireApiHotelPermission } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { validateTutarCents } from "@/lib/validation";
 
 const tahsilatSchema = z.object({
   otelId: z.number().int().positive(),
@@ -42,7 +43,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const parsed = tahsilatSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = tahsilatSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Tahsilat bilgilerini kontrol edin.", 400);
 
   const data = parsed.data;
@@ -50,7 +54,8 @@ export async function POST(request: Request) {
   if (permission.error || !permission.session) return permission.error;
 
   const tutarCents = decimalToCents(data.tutar);
-  if (tutarCents <= 0) return jsonError("Tahsilat tutarı sıfırdan büyük olmalıdır.", 400);
+  const tutarError = validateTutarCents(tutarCents, "Tahsilat tutarı");
+  if (tutarError) return jsonError(tutarError, 400);
 
   const [cari, hesap] = await Promise.all([
     prisma.cari.findFirst({ where: { id: data.cariId, silindiMi: false, aktifMi: true } }),

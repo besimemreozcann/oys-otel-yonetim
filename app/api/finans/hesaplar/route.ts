@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { centsToDecimalString } from "@/lib/faz3";
 import { calculateAccountBalanceCents } from "@/lib/finance";
-import { intParam, jsonError, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, prismaErrorResponse, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const hesapSchema = z.object({
@@ -46,7 +46,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const parsed = hesapSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = hesapSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Hesap bilgilerini kontrol edin.", 400);
 
   const permission = await requireApiHotelPermission(parsed.data.otelId, "finans", "TAM");

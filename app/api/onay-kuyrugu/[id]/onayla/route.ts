@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { intParam, jsonError, requireApiHotelPermission, requireApiSession } from "@/lib/api";
+import { intParam, jsonError, parseJsonBody, requireApiHotelPermission, requireApiSession } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   kararAciklamasi: z.string().optional().nullable()
 });
+
+const ALREADY_PROCESSED_MESSAGE = "Bu talep zaten işleme alınmış.";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -15,7 +17,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   if (error || !session) return error;
   if (session.rol === "PERSONEL") return jsonError("Onay vermek icin yonetici yetkisi gerekir.", 403);
 
-  const parsed = schema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = schema.safeParse(body.data);
   if (!parsed.success) return jsonError("Onay aciklamasini kontrol edin.", 400);
   const { id: rawId } = await params;
   const id = intParam(rawId, "Onay talebi");
@@ -24,7 +29,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     include: { otel: { select: { ad: true } } }
   });
   if (!talep) return jsonError("Onay talebi bulunamadi.", 404);
-  if (talep.durum !== "BEKLIYOR") return jsonError("Bu talep daha once karara baglanmis.", 400);
   if (talep.tur !== "REZERVASYON_SILME" || talep.hedefTablo !== "Rezervasyon") {
     return jsonError("Bu onay turu henuz aktif degil.", 400);
   }
@@ -39,6 +43,19 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   if (!rezervasyon) return jsonError("Iptal edilecek rezervasyon bulunamadi.", 404);
 
   const result = await prisma.$transaction(async (tx) => {
+    const guarded = await tx.onayTalebi.updateMany({
+      where: { id: talep.id, durum: "BEKLIYOR" },
+      data: {
+        durum: "ONAYLANDI",
+        kararVerenId: session.id,
+        kararTarihi: new Date(),
+        kararAciklamasi: parsed.data.kararAciklamasi || null
+      }
+    });
+    if (guarded.count === 0) {
+      return { conflict: true };
+    }
+
     const updatedReservation = await tx.rezervasyon.update({
       where: { id: rezervasyon.id },
       data: { durum: "IPTAL" }
@@ -59,14 +76,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       where: { id: rezervasyon.odaId },
       data: { operasyonDurumu: otherActive > 0 ? "REZERVE" : "BOS" }
     });
-    const karar = await tx.onayTalebi.update({
+    const karar = await tx.onayTalebi.findUnique({
       where: { id: talep.id },
-      data: {
-        durum: "ONAYLANDI",
-        kararVerenId: session.id,
-        kararTarihi: new Date(),
-        kararAciklamasi: parsed.data.kararAciklamasi || null
-      }
+      include: { kararVeren: { select: { adSoyad: true, kullaniciAdi: true } } }
     });
     await tx.islemLogu.create({
       data: {
@@ -82,6 +94,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     });
     return { karar, rezervasyon: updatedReservation };
   });
+  if ("conflict" in result) return jsonError(ALREADY_PROCESSED_MESSAGE, 409);
 
   return Response.json({ ...result, message: "Rezervasyon iptal talebi onaylandi." });
 }

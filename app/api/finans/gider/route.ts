@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { centsToDecimalString, dateOnly, decimalToCents } from "@/lib/faz3";
-import { intParam, jsonError, requireApiHotelPermission } from "@/lib/api";
+import { calculateAccountBalanceCents } from "@/lib/finance";
+import { intParam, jsonError, parseJsonBody, requireApiHotelPermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { validateTutarCents } from "@/lib/validation";
 
 const giderSchema = z.object({
   otelId: z.number().int().positive(),
@@ -43,7 +45,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const parsed = giderSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body.error) return body.error;
+
+  const parsed = giderSchema.safeParse(body.data);
   if (!parsed.success) return jsonError("Gider bilgilerini kontrol edin.", 400);
 
   const data = parsed.data;
@@ -51,15 +56,21 @@ export async function POST(request: Request) {
   if (permission.error || !permission.session) return permission.error;
 
   const tutarCents = decimalToCents(data.tutar);
-  if (tutarCents <= 0) return jsonError("Gider tutarı sıfırdan büyük olmalıdır.", 400);
+  const tutarError = validateTutarCents(tutarCents, "Gider tutarı");
+  if (tutarError) return jsonError(tutarError, 400);
 
-  const hesap = await prisma.hesap.findFirst({ where: { id: data.hesapId, otelId: data.otelId, silindiMi: false, aktifMi: true } });
+  const hesap = await prisma.hesap.findFirst({
+    where: { id: data.hesapId, otelId: data.otelId, silindiMi: false, aktifMi: true },
+    include: { hareketler: { where: { silindiMi: false }, select: { tur: true, tutar: true } } }
+  });
   if (!hesap) return jsonError("Hesap bulunamadı veya aktif değil.", 400);
 
   const cari = data.cariId ? await prisma.cari.findFirst({ where: { id: data.cariId, silindiMi: false, aktifMi: true } }) : null;
   if (data.cariId && !cari) return jsonError("Cari bulunamadı veya aktif değil.", 400);
 
   const tutar = centsToDecimalString(tutarCents);
+  const balanceAfterCents = calculateAccountBalanceCents(hesap.hareketler) - tutarCents;
+  const uyari = balanceAfterCents < 0 ? "Hesap bakiyesi negatife düştü." : undefined;
   const result = await prisma.$transaction(async (tx) => {
     const cariHareket = cari
       ? await tx.cariHareket.create({
@@ -102,5 +113,5 @@ export async function POST(request: Request) {
     return { hesapHareket, cariHareket };
   });
 
-  return Response.json(result, { status: 201 });
+  return Response.json({ ...result, ...(uyari ? { uyari } : {}) }, { status: 201 });
 }
